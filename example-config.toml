@@ -1,25 +1,25 @@
-run_desc = "conditional test"
+run_desc = "Full test conditional nocompile"
 
-root_data_dir = "/home/warpig/localtmp" 
+root_data_dir = "/projects/imagesets/BBBC021/BBBC021_comp_conc_nice_phen"
 # selected_datasets = ["DMSO", "cytochalasin B_0.01", "cytochalasin B_0.03", "cytochalasin B_0.1", "cytochalasin B_0.3", "cytochalasin B_1.0", "cytochalasin B_10.0", "cytochalasin B_3.0", "cytochalasin B_30.0"]
 selected_datasets = ["DMSO", "cytochalasin B_30.0"]
 
-image_size = 16
-batch_size = 128
+image_size = 64
+batch_size = 256
 num_train_timesteps = 1000 
 num_inference_steps = 50 
 beta_start = 0.0001 
 beta_end = 0.02 
 beta_schedule = "linear" 
 
-nb_epochs = 50
-save_every = 1
-generate_every = 1
-nb_generated_images = 500 # Authors recommend at least 10,000(!)
+nb_epochs = 500
+save_every = 50
+generate_every = 20
+nb_generated_images = 1000 # Authors recommend at least 10,000(!)
 
 compile = "False"
 
-Inception_feat_dim = 192 
+Inception_feat_dim = 768
 # Possible values:
 # - 64: first max pooling features
 # - 192: second max pooling features
@@ -30,6 +30,6 @@ Inception_feat_dim = 192
 #   should be greater than the dimension of the coding layer"
 FID_recompute = "False"
 
-class_emb_size = 1
+class_emb_size = 2
 
 # Note: boolean must be given in string format!

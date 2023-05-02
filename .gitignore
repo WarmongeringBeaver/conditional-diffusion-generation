@@ -4,3 +4,4 @@ datasets_stats
 .HF_cache
 .env
 __pycache__
+config.toml
