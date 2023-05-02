@@ -120,9 +120,19 @@ def parse_wrapper(timestamp_str: str) -> dict:
     if len(sys.argv) >= 2 and sys.argv[1] in ["--help", "-h"]:
         parser.parse_args(["--help"])
     # Try to read from file
-    configfile_path = "config.toml"
-    if os.path.isfile(configfile_path):
-        header_print("Reading config from config.toml...")
+    default_configfile_paths = [
+        "config.toml",
+        "config-server.toml",
+        "config-local.toml",
+    ]
+    default_configfile_found = False
+    id = 0
+    while not default_configfile_found and id < len(default_configfile_paths):
+        configfile_path = default_configfile_paths[id]
+        default_configfile_found = os.path.isfile(configfile_path)
+        id += 1
+    if default_configfile_found:
+        header_print(f"Reading config from {configfile_path}...")
         with open(configfile_path, "rb") as f:
             config: dict = tomli.load(f)
             config_list = []

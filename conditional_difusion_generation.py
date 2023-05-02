@@ -45,7 +45,6 @@ from utils_datasets import (
 # - use learning rate scheduler (at least pass lr as arg)
 # - allow to choose compile strategy in args (max-autotune, etc.)
 # - use proper logging
-# - use a proper VCS at some point...
 # - log torch summary for better visualization
 # - use tensorboard or W&B for better viz
 
