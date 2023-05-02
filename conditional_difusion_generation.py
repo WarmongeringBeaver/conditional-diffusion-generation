@@ -34,7 +34,7 @@ from utils_datasets import (
 #       -> requires PR on GH... => shamelessly steal & modify code in local? :)
 # - profile!
 # - save performance statistics (time, memory, etc.) along training
-# - implement other metrics:
+# - implement other metrics: -> pytorch-fidelity
 #   - IS
 #   - Perceptual Distance
 #   - ..?
