@@ -48,24 +48,24 @@ def save_grid_images(images, size, filename) -> None:
     output_im.save(filename)
 
 
-def parse_wrapper(timestamp_str: str) -> dict:
-    """Parses args from `config.toml`, or falls back to command line."""
-    # Define parser
+def define_config_file_parser() -> ArgumentParser:
     desc = "Experiments results are saved in `experiments/run_<timestamp>."
-    desc += " Reads arguments from `config.toml` if present, else from command line."
-    parser = ArgumentParser(description=desc)
-    parser.add_argument(
+    desc += " Reads the following arguments from the passed TOML config file path (and NOT from CL; TODO: clean this)."
+    configfile_parser = ArgumentParser(description=desc)
+    configfile_parser.add_argument(
         "--run_desc",
         type=str,
         default="",
         help="Will be added to the run folder name: keep it short!",
     )
-    parser.add_argument("--root_data_dir", type=str, required=True)
-    parser.add_argument("--selected_datasets", type=ast.literal_eval, required=True)
-    parser.add_argument(
+    configfile_parser.add_argument("--root_data_dir", type=str, required=True)
+    configfile_parser.add_argument(
+        "--selected_datasets", type=ast.literal_eval, required=True
+    )
+    configfile_parser.add_argument(
         "--save_every", type=int, default=100, help="Save every SAVE_EVERY epochs"
     )
-    parser.add_argument(
+    configfile_parser.add_argument(
         "--generate_every",
         type=int,
         default=10,
@@ -74,81 +74,76 @@ def parse_wrapper(timestamp_str: str) -> dict:
     hlp_msg = "Number of generated images every GENERATE_EVERY epoch. "
     hlp_msg += "Important for the FID computation reliability. Authors recommend at least 10,000! "
     hlp_msg += "See https://github.com/bioinf-jku/TTUR for original TF implementation."
-    parser.add_argument(
+    configfile_parser.add_argument(
         "--nb_generated_images",
         help="Number of generated images every GENERATE_EVERY epoch. Important for the FID computation reliability!",
         type=int,
         required=True,
     )
-    parser.add_argument("--image_size", type=int, required=True)
-    parser.add_argument("--batch_size", type=int, required=True)
-    parser.add_argument("--num_train_timesteps", type=int, required=True)
-    parser.add_argument("--num_inference_steps", type=int, required=True)
-    parser.add_argument("--beta_start", type=float, required=True)
-    parser.add_argument("--beta_end", type=float, required=True)
-    parser.add_argument(
+    configfile_parser.add_argument("--image_size", type=int, required=True)
+    configfile_parser.add_argument("--batch_size", type=int, required=True)
+    configfile_parser.add_argument("--num_train_timesteps", type=int, required=True)
+    configfile_parser.add_argument("--num_inference_steps", type=int, required=True)
+    configfile_parser.add_argument("--beta_start", type=float, required=True)
+    configfile_parser.add_argument("--beta_end", type=float, required=True)
+    configfile_parser.add_argument(
         "--beta_schedule",
         type=str,
         help="One of `linear`, `squaredcos_cap_v2` or `scaled_linear`",
         required=True,
     )
-    parser.add_argument(
+    configfile_parser.add_argument(
         "--nb_epochs",
         type=int,
         help="Number of epochs to train for",
         required=True,
     )
-    parser.add_argument(
+    configfile_parser.add_argument(
         "--compile",
         help="Compile the model?",
         type=str,
         choices=["True", "False"],
         default="False",
     )
-    parser.add_argument("--Inception_feat_dim", type=int, required=True)
-    parser.add_argument(
+    configfile_parser.add_argument("--Inception_feat_dim", type=int, required=True)
+    configfile_parser.add_argument(
         "--FID_recompute",
         help="Recompute FID statistics?",
         type=str,
         choices=["True", "False"],
         default="False",
     )
-    parser.add_argument(
+    configfile_parser.add_argument(
         "--class_emb_size", type=int, required=True, help="Size of the class embedding"
     )
-    ## Catch --help flag from CL before reading file
+    return configfile_parser
+
+
+def parse_wrapper() -> dict:
+    """Parses args from a configuration file path passed through CL."""
+    # Define parser
+    configfile_parser = define_config_file_parser()
+    # Catch --help flag from CL before reading file
     if len(sys.argv) >= 2 and sys.argv[1] in ["--help", "-h"]:
-        parser.parse_args(["--help"])
-    # Try to read from file
-    default_configfile_paths = [
-        "config.toml",
-        "config-server.toml",
-        "config-local.toml",
-    ]
-    default_configfile_found = False
-    id = 0
-    while not default_configfile_found and id < len(default_configfile_paths):
-        configfile_path = default_configfile_paths[id]
-        default_configfile_found = os.path.isfile(configfile_path)
-        id += 1
-    if default_configfile_found:
-        header_print(f"Reading config from {configfile_path}...")
-        with open(configfile_path, "rb") as f:
-            config: dict = tomli.load(f)
-            config_list = []
-            for key, value in config.items():
-                config_list += [f"--{key}", str(value)]
-            args: dict = vars(parser.parse_args(config_list))
-    # If no config file, read from command line
-    else:
-        my_warn("No config file found (`config.toml`), taking command-line arguments")
-        args: dict = vars(parser.parse_args())
+        configfile_parser.parse_args(["--help"])
+    # Get config file path from CL
+    cl_parser = ArgumentParser()
+    cl_parser.add_argument("configfile_path", type=str)
+    configfile_path = cl_parser.parse_args().configfile_path
+    # Read config file
+    header_print(f"Reading config from {configfile_path}...")
+    with open(configfile_path, "rb") as f:
+        config: dict = tomli.load(f)
+        config_list = []
+        for key, value in config.items():
+            config_list += [f"--{key}", str(value)]
+        args: dict = vars(configfile_parser.parse_args(config_list))
     return args
 
 
 @torch.no_grad()
 def save_loss_plot(
-    losses_per_epoch: "list[float]",
+    losses_per_epoch: list[float],
     loss_func,
     this_experiment_folder: str,
     window_width: int = 20,

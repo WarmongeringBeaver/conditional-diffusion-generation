@@ -57,7 +57,7 @@ timestamp = time.gmtime()
 timestamp_str: str = time.strftime("%Y-%m-%dT%H:%M:%SZ", timestamp)
 
 ## Args
-args: dict = parse_wrapper(timestamp_str)
+args: dict = parse_wrapper()
 
 ## Folder structure
 # experiments
