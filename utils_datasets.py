@@ -1,19 +1,16 @@
 # Load local dataset with hugging face Datasets library
 
-import os
 from io import TextIOBase
 from math import ceil
 from pathlib import Path
 
 import torch
 from datasets import DatasetDict, load_dataset
-from pytorch_fid.fid_score import save_fid_stats
 from torchvision import transforms
 from utils import header_print
 
 # TODO's:
 # - clean data loading (in particular, make a clear link between class index and class name.....)
-# - remove legacy code for HF toy dataset
 
 
 def load_BBBC021_comp_conc_nice_phen(root_data_dir: str, selected_ds_names: list[str]):
@@ -30,68 +27,6 @@ def load_BBBC021_comp_conc_nice_phen(root_data_dir: str, selected_ds_names: list
 
     full_dataset = torch.utils.data.ConcatDataset(ds_list)
 
-    return full_dataset
-
-
-def precompute_dataset_fid_statistics(
-    root_data_dir: str,
-    selected_ds_names: "list[str]",
-    Inception_feat_dim: int,
-    logfile,
-    fid_batch_size: int = 50,
-    device: str = "cuda",
-    num_workers: int = 8,
-    force_recompute: str = "False",
-):
-    """Computes the FID statistics for the selected datasets.
-    
-    Saves the statistics in the `datasets_stats` folder, in a file named:
-        ``<dataset_name>_feat_dim_<Inception_feat_dim>.npz``.
-
-    Arguments:
-    ----------
-    - `root_data_dir`: `str`\\
-    The root directory where each dataset is stored in its own subfolder.
-    - `selected_ds_names`: `list[str]`\\
-    The names of the datasets loaded for the experiment and for which to compute the FID statistics.
-    - `Inception_feat_dim`: `int`\\
-    The dimension of the InceptionV3 features. Will change the FIDs!
-    - `force_recompute`: `str`\\
-    STRING for now, because of parsing...
-    """
-    header_print("Precomputing FID statistics for loaded datasets\n")
-    os.makedirs("./datasets_stats", exist_ok=True)
-    for ds_name in selected_ds_names:
-        stat_file_path = Path(
-            "./datasets_stats",
-            ds_name + "_feat_dim_" + str(Inception_feat_dim) + ".npz",
-        )
-        if stat_file_path.exists() and force_recompute != "True":
-            msg = f"File {stat_file_path} already exists. Skipping precomputation."
-            logfile.write(msg + "\n")
-            print(msg)
-            continue
-        ds_path = Path(root_data_dir, ds_name)
-        save_fid_stats(
-            (ds_path.as_posix(), stat_file_path.as_posix()),
-            fid_batch_size,
-            device,
-            Inception_feat_dim,
-            num_workers,
-        )
-
-
-def load_full_dataset_from_HF(dataset_id: str, logfile):
-    header_print("Loading dataset " + dataset_id + " from Hugging Face Datasets")
-    logfile.write(f"dataset_id: {dataset_id}\n")
-    ds_global: DatasetDict = load_dataset(dataset_id, "full", cache_dir="./data")
-    train_dataset = ds_global["train"]
-    test_dataset = ds_global["test"]
-    validation_dataset = ds_global["validation"]
-    # concatenate all data
-    full_dataset = torch.utils.data.ConcatDataset(
-        [train_dataset, test_dataset, validation_dataset]
-    )
     return full_dataset
 
 

@@ -16,18 +16,20 @@ from warnings import warn
 import numpy as np
 import tomli
 import torch
+import torch_fidelity
 import torchvision
 from diffusers import DDIMPipeline, DDIMScheduler
 from matplotlib import pyplot as plt
 from PIL import Image
-from pytorch_fid.fid_score import calculate_fid_given_paths
 
 # TODO's:
 # - take parameters from config (& log them) for compute_FIDs
-# - remove CL parsing and simply directly give args as in-code python dict
+# - directly give args as in-code python dict?
 
 
-@torch.no_grad()
+########################################################################################
+################################# Visualization helpers ################################
+########################################################################################
 def show_images(x):
     """Given a batch of images x, make a grid and convert to PIL"""
     x = x * 0.5 + 0.5  # Map from (-1, 1) back to (0, 1)
@@ -37,7 +39,6 @@ def show_images(x):
     return grid_im
 
 
-@torch.no_grad()
 def save_grid_images(images, size, filename) -> None:
     """Given a list of PIL images, stack them together into a line for easy viewing"""
     # 10 is the spacing between images
@@ -48,6 +49,9 @@ def save_grid_images(images, size, filename) -> None:
     output_im.save(filename)
 
 
+########################################################################################
+################################### Arguments parsing ##################################
+########################################################################################
 def define_config_file_parser() -> ArgumentParser:
     desc = "Experiments results are saved in `experiments/run_<timestamp>."
     desc += " Reads the following arguments from the passed TOML config file path (and NOT from CL; TODO: clean this)."
@@ -141,68 +145,9 @@ def parse_wrapper() -> dict:
     return args
 
 
-@torch.no_grad()
-def save_loss_plot(
-    losses_per_epoch: list[float],
-    loss_func,
-    this_experiment_folder: str,
-    window_width: int = 20,
-) -> None:
-    plt.style.use("ggplot")
-    save_folder = this_experiment_folder + "/outputs"
-    current_nb_epochs = len(losses_per_epoch)
-    # raw
-    plt.plot(
-        list(range(1, current_nb_epochs + 1)),
-        losses_per_epoch,
-        label="instantaneous",
-    )
-    # moving average
-    cumsum_vec = np.cumsum(np.insert(losses_per_epoch, 0, 0))
-    ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
-    plt.plot(
-        list(range(window_width, current_nb_epochs + 1)),
-        ma_vec,
-        label=f"running average",
-    )
-    plt.xlabel("iteration")
-    plt.ylabel(f"average {loss_func._get_name()}")
-    plt.legend()
-    # write image to file
-    save_folder = this_experiment_folder + "/outputs"
-    plt.savefig(save_folder + "/loss_plot.png", bbox_inches="tight", dpi=300)
-    # write logscale image to file
-    plt.yscale("log")
-    plt.savefig(save_folder + "/loss_log_plot.png", bbox_inches="tight", dpi=300)
-    plt.close()
-    # save list of loss values
-    np.save(save_folder + "/losses.npy", losses_per_epoch)
-
-
-@torch.no_grad()
-def save_current_model(
-    model,
-    noise_scheduler: DDIMScheduler,
-    this_experiment_folder: str,
-    epoch: int,
-    logfile: TextIOBase,
-    save_method: str = "torch",
-) -> None:
-    save_folder = Path(this_experiment_folder, "checkpoints", f"epoch_{epoch}")
-    # some trouble with onnx...
-    match save_method:
-        case "torch":
-            os.makedirs(save_folder)
-            torch.save(model.state_dict(), Path(save_folder, "unet.pt"))
-            logfile.write(f"Saved model at epoch {epoch} in {save_folder}\n")
-        case "hugging_face":
-            image_pipe = DDIMPipeline(unet=model, scheduler=noise_scheduler)
-            image_pipe.save_pretrained(save_folder)
-            logfile.write(f"Saved pipeline at epoch {epoch} in {save_folder}\n")
-        case _:
-            raise ValueError(f"Unknown save method {save_method}")
-
-
+########################################################################################
+###################################### Generation ######################################
+########################################################################################
 @torch.no_grad()
 def generate_samples(
     model,
@@ -313,91 +258,116 @@ def _numpy_to_pil(images: np.ndarray) -> list:
     return pil_images
 
 
+########################################################################################
+################################ Model & Metrics saving ################################
+########################################################################################
+def save_loss_plot(
+    losses_per_epoch: list[float],
+    loss_func,
+    this_experiment_folder: str,
+    window_width: int = 20,
+) -> None:
+    plt.style.use("ggplot")
+    save_folder = this_experiment_folder + "/outputs"
+    current_nb_epochs = len(losses_per_epoch)
+    # raw
+    plt.plot(
+        list(range(1, current_nb_epochs + 1)),
+        losses_per_epoch,
+        label="instantaneous",
+    )
+    # moving average
+    cumsum_vec = np.cumsum(np.insert(losses_per_epoch, 0, 0))
+    ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
+    plt.plot(
+        list(range(window_width, current_nb_epochs + 1)),
+        ma_vec,
+        label=f"running average",
+    )
+    plt.xlabel("iteration")
+    plt.ylabel(f"average {loss_func._get_name()}")
+    plt.legend()
+    # write image to file
+    save_folder = this_experiment_folder + "/outputs"
+    plt.savefig(save_folder + "/loss_plot.png", bbox_inches="tight", dpi=300)
+    # write logscale image to file
+    plt.yscale("log")
+    plt.savefig(save_folder + "/loss_log_plot.png", bbox_inches="tight", dpi=300)
+    plt.close()
+    # save list of loss values
+    np.save(save_folder + "/losses.npy", losses_per_epoch)
+
+
 @torch.no_grad()
-def compute_FIDs(
+def save_current_model(
+    model,
+    noise_scheduler: DDIMScheduler,
+    this_experiment_folder: str,
+    epoch: int,
+    logfile: TextIOBase,
+    save_method: str = "torch",
+) -> None:
+    save_folder = Path(this_experiment_folder, "checkpoints", f"epoch_{epoch}")
+    # some trouble with onnx...
+    match save_method:
+        case "torch":
+            os.makedirs(save_folder)
+            torch.save(model.state_dict(), Path(save_folder, "unet.pt"))
+            logfile.write(f"Saved model at epoch {epoch} in {save_folder}\n")
+        case "hugging_face":
+            image_pipe = DDIMPipeline(unet=model, scheduler=noise_scheduler)
+            image_pipe.save_pretrained(save_folder)
+            logfile.write(f"Saved pipeline at epoch {epoch} in {save_folder}\n")
+        case _:
+            raise ValueError(f"Unknown save method {save_method}")
+
+
+@torch.no_grad()
+def compute_metrics(
     args: dict,
     this_experiment_folder: str,
     epoch: int,
-    device: str,
-    FIDs_per_epoch: list[dict[str, float]],
+    metrics_per_epoch: list[dict],
 ) -> None:
-    """Computes and saves FID scores & plots for each dataset.
+    """Computes and saves metrics & plots for each dataset.
 
-    From the Authors (https://github.com/bioinf-jku/TTUR#fr%C3%A9chet-inception-distance-fid):
+    Nota: from the Authors of FID:
         IMPORTANT: The number of samples to calculate the Gaussian statistics
         (mean and covariance) should be greater than the dimension of the coding layer.
     Also:
         We recommend using a minimum sample size of 10,000 [!!] to calculate the FID
         otherwise the true FID of the generator is underestimated.
+    See https://github.com/bioinf-jku/TTUR#fr%C3%A9chet-inception-distance-fid.
     """
-    FIDs_per_epoch.append({})
-    # compute FID for each dataset
+    metrics_per_epoch.append({})
     for ds_name in args["selected_datasets"]:
-        precomputed_stats_path = Path(
-            "datasets_stats",
-            ds_name + "_feat_dim_" + str(args["Inception_feat_dim"]) + ".npz",
-        )
-        generated_ds_path = Path(
+        generated_images_folder = Path(
             this_experiment_folder,
             "outputs",
             f"epoch_{epoch}_generated_images",
             ds_name,
         )
-        fid_value = calculate_fid_given_paths(
-            (generated_ds_path.as_posix(), precomputed_stats_path.as_posix()),
+        dataset_folder = Path(args["root_data_dir"], ds_name)
+        metrics_dict = torch_fidelity.calculate_metrics(
+            input1=dataset_folder,
+            input2=generated_images_folder,
+            cuda=True,
             batch_size=args["batch_size"],
-            device=device,
-            dims=args["Inception_feat_dim"],
-            num_workers=8,
+            isc=True,
+            fid=True,
+            kid=True,
+            ppl=True,
+            verbose=True,
+            cache_root=".fidelity_cache",
+            input1_cache_name=f"{ds_name}",  # forces caching
+            rng_seed=42,
         )
-        FIDs_per_epoch[-1][ds_name] = fid_value
-    # pickle FID score & plot
-    _save_FID_score(FIDs_per_epoch, this_experiment_folder, args["generate_every"])
+        metrics_per_epoch[-1][ds_name] = metrics_dict
 
 
-def _save_FID_score(
-    FIDs_per_epoch: list[dict[str, float]],
-    this_experiment_folder: str,
-    generate_every: int,
-    window_width: int = 10,
-) -> None:
-    """Saves the FID score & plot between generated datasets and precomputed statistics."""
-    # refresh live plot of FID score
-    plt.style.use("ggplot")
-    save_folder = this_experiment_folder + "/outputs"
-    current_nb_epochs = len(FIDs_per_epoch) * generate_every
-    # load past FID values & update plot
-    for ds_name in FIDs_per_epoch[0].keys():
-        FIDs_for_this_ds = [
-            FIDs_per_epoch[t][ds_name] for t in range(len(FIDs_per_epoch))
-        ]
-        plt.plot(
-            list(range(1, current_nb_epochs + 1, generate_every)),
-            FIDs_for_this_ds,
-            label=ds_name,
-        )
-        # # add moving average -> BROKEN
-        # if len(FIDs_for_this_ds) >= window_width:
-        #     cumsum_vec = np.cumsum(np.insert(FIDs_for_this_ds, 0, 0))
-        #     ma_vec = (
-        #         cumsum_vec[window_width:] - cumsum_vec[:-window_width]
-        #     ) / window_width
-        #     plt.plot(
-        #         list(range(window_width, current_nb_epochs + 1, generate_every)),
-        #         ma_vec,
-        #         label=f"{ds_name} (running average)",
-        #     )
-    plt.xlabel("iteration")
-    plt.ylabel("FID score")
-    plt.legend()
-    # write image to file
-    plt.savefig(save_folder + "/FID_plot.png", bbox_inches="tight", dpi=300)
-    plt.close()
-    # save list of FID values
-    with open(save_folder + "/FID_values.pickle", "wb") as handle:
-        pickle.dump(FIDs_per_epoch, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
+########################################################################################
+##################################### Miscellaneous ####################################
+########################################################################################
 def my_warn(msg: str) -> None:
     warn(
         f"\n  \033[93m{msg}\033[0m",

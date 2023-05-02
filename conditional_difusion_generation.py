@@ -11,8 +11,9 @@ from diffusers.models import UNet2DModel
 from torch import nn
 from tqdm import tqdm
 from tqdm.auto import trange
+
 from utils import (
-    compute_FIDs,
+    compute_metrics,
     generate_samples,
     header_print,
     my_warn,
@@ -20,21 +21,17 @@ from utils import (
     save_current_model,
     save_loss_plot,
 )
-from utils_datasets import (
-    load_BBBC021_comp_conc_nice_phen,
-    precompute_dataset_fid_statistics,
-    preprocess_dataset,
-)
+from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
 
 # TODO's:
 # - Adapt loss to unbalanced classes
 # - use HF Accelerate to train on multiple GPUs
-# - remove rogue prints about Qt (is it matplotlib?) and rogue tqdm bar (pytorch_fid)
+# - remove rogue prints about Qt (is it matplotlib?) and rogue tqdm bar (pytorch_fid)  >>>DOING?<<<
 #       note: prints appear juste before rogue tqdm bar, maybe both are caused by pytorch_fid?
 #       -> requires PR on GH... => shamelessly steal & modify code in local? :)
 # - profile!
 # - save performance statistics (time, memory, etc.) along training
-# - implement other metrics: -> pytorch-fidelity
+# - implement other metrics: -> pytorch-fidelity >>>DOING<<<
 #   - IS
 #   - Perceptual Distance
 #   - ..?
@@ -107,14 +104,6 @@ full_dataset = load_BBBC021_comp_conc_nice_phen(
 )
 dataloader, nb_batches = preprocess_dataset(full_dataset, args, logfile)
 
-## Compute FID stats
-precompute_dataset_fid_statistics(
-    args["root_data_dir"],
-    args["selected_datasets"],
-    args["Inception_feat_dim"],
-    logfile,
-    force_recompute=args["FID_recompute"],
-)
 
 ########################################################################################
 ######################################### Model ########################################
@@ -189,9 +178,9 @@ logfile.write(f"loss_func: {loss_func}\n")
 nb_epochs = args["nb_epochs"]
 logfile.write(f"nb_epochs: {nb_epochs}\n")
 
-# keep track of losses and FIDs along training
+# keep track of losses and metrics along training
 losses_per_epoch: list[float] = []
-FIDs_per_epoch: list[dict[str, float]] = []
+metrics_per_epoch: list[dict] = []
 
 header_print("Learning...\n")
 iterator = trange(nb_epochs, desc="Epoch")
@@ -249,7 +238,7 @@ for epoch in iterator:
             model, noise_scheduler, this_experiment_folder, epoch, logfile
         )
 
-    # generate samples & compute FID
+    # generate samples & compute metrics
     if epoch % args["generate_every"] == 0:
         # generate samples and write them to disk
         model.eval()
@@ -263,9 +252,9 @@ for epoch in iterator:
             iterator,
             logfile,
         )
-        # compute FID
-        iterator.set_postfix_str(f"Computing FID...")
-        compute_FIDs(args, this_experiment_folder, epoch, device, FIDs_per_epoch)
+        # compute metrics
+        iterator.set_postfix_str(f"Computing metrics...")
+        compute_metrics(args, this_experiment_folder, epoch, metrics_per_epoch)
         model.train()
 
 
