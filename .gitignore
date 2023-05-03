@@ -5,3 +5,4 @@ datasets_stats
 .env
 __pycache__
 config.toml
+.fidelity_cache/
