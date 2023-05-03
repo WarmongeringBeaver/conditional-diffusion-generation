@@ -47,9 +47,11 @@ class ClassConditionedUnet(nn.Module):
         ### Checks
         assert (
             class_labels.shape[0] == bs
-        ), "Batch size of images and class labels must match"
+        ), f"Batch size of images and class labels must match: images.shape = {images.shape}, class_labels.shape = {class_labels.shape}"
 
-        assert timesteps.shape[0] == bs, "Batch size of images and timesteps must match"
+        assert (
+            timesteps.shape[0] == bs
+        ), f"Batch size of images and timesteps must match: images.shape = {images.shape}, timesteps.shape = {timesteps.shape}"
 
         ### Forward pass
         # class conditioning in right shape to add as additional input channels
