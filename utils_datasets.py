@@ -67,7 +67,7 @@ def preprocess_dataset(
 
     # create a dataloader to serve up the transformed images in batches
     batch_size = args["batch_size"]
-    logfile.write(f"batch_size: {batch_size}\n")
+    logfile.write(f"batch_size: {batch_size}\n\n")
     nb_batches = ceil(len(full_dataset) / batch_size)
 
     dataloader = torch.utils.data.DataLoader(

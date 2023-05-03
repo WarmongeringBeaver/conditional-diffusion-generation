@@ -8,6 +8,7 @@ import time
 import torch
 from diffusers import DDIMScheduler
 from torch import nn
+from torchinfo import summary
 from tqdm import tqdm
 from tqdm.auto import trange
 
@@ -24,6 +25,12 @@ from utils import (
 from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
 
 # TODO's:
+# - Make conditioned generation work... Ideas: >>>DOING<<<
+#   - try a simple OHE
+#   - try adding cross-attention layers attending *class names* directly? Might seem weird but it's actually what us humans are doing!
+# Then cross-attention layers in the UNet to incorporate this information into the denoising path
+# (that's +/- how Stable Diffusion handles text conditioning, reportedly)
+# (also fun to implement this, but probably time-consuming)
 # - Adapt loss to unbalanced classes?
 # - use HF Accelerate to train on multiple GPUs
 # - profile!
@@ -38,7 +45,6 @@ from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
 # - use learning rate scheduler (at least pass lr as arg)
 # - allow to choose compile strategy in args (max-autotune, etc.)
 # - use proper logging
-# - log torch summary for better visualization
 # - use tensorboard or W&B for better viz
 
 
@@ -76,9 +82,9 @@ if os.path.isfile(logfile_path):
     raise RuntimeError(err_msg)
 logfile = open(logfile_path, "x", buffering=1)
 # buffering=1: flush every new line; allows logging in real time
-logfile.write(f"timestamp: {timestamp_str}\n")
+logfile.write(f"timestamp: {timestamp_str}\n\n")
 logfile.write(f"root_data_dir: {args['root_data_dir']}\n")
-logfile.write(f"selected_datasets: {args['selected_datasets']}\n")
+logfile.write(f"selected_datasets: {args['selected_datasets']}\n\n")
 
 ## Check CUDA availability
 if not torch.cuda.is_available():
@@ -86,7 +92,7 @@ if not torch.cuda.is_available():
     logfile.write(err + "\n")
     raise RuntimeError(err)
 device = "cuda"
-logfile.write(f"device: {device}\n")
+logfile.write(f"device: {device}\n\n")
 
 ## Misc CUDA optimizations
 torch.set_float32_matmul_precision("high")
@@ -118,8 +124,8 @@ noise_scheduler = DDIMScheduler(
     beta_end=beta_end,
     beta_schedule=beta_schedule,
 )
-logfile.write(f"noise_scheduler: {noise_scheduler}\n")
-logfile.write(f"num_inference_steps: {args['num_inference_steps']}\n")
+logfile.write(f"noise_scheduler: {noise_scheduler}")
+logfile.write(f"num_inference_steps: {args['num_inference_steps']}\n\n")
 
 ## Model
 # UNet-like architecture with 4 down and upsampling blocks with self-attention down the U.
@@ -127,6 +133,21 @@ logfile.write(f"num_inference_steps: {args['num_inference_steps']}\n")
 num_classes = len(args["selected_datasets"])
 model = ClassConditionedUnet(num_classes, args["class_emb_dim"], args["image_size"])
 model.to(device)
+# fancyprint model
+timesteps = torch.randint(0, 10000, (args["image_size"],), device=device).long()
+class_labels = torch.randint(
+    0, len(args["selected_datasets"]), (args["image_size"],), device=device
+).long()
+model_summary = summary(
+    model,
+    (args["batch_size"], 3, args["image_size"], args["image_size"]),
+    timesteps=timesteps,
+    class_labels=class_labels,
+    device="cuda",
+)
+logfile.write("model:\n")
+logfile.write(str(model_summary))
+logfile.write("\n\n")
 
 # the model is compiled (will only work with `torch>=2.0.0`); this will take quite some time at first pass
 # (`args["compile"] == "True"` is ugly but works with config file)
@@ -139,21 +160,20 @@ else:
     msg += " or because --compile='False' was specified."
     my_warn(msg)
     logfile.write(msg + "\n")
-logfile.write(f"model: {model}\n")
 
 ## Optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-logfile.write(f"optimizer: {optimizer}\n")
+logfile.write(f"optimizer: {optimizer}\n\n")
 
 ## Loss
 loss_func = nn.MSELoss()
-logfile.write(f"loss_func: {loss_func}\n")
+logfile.write(f"loss_func: {loss_func}\n\n")
 
 ########################################################################################
 ######################################## Learning ######################################
 ########################################################################################
 nb_epochs = args["nb_epochs"]
-logfile.write(f"nb_epochs: {nb_epochs}\n")
+logfile.write(f"nb_epochs: {nb_epochs}\n\n### Learning loop started\n")
 
 # keep track of losses and metrics along training
 losses_per_epoch: list[float] = []
