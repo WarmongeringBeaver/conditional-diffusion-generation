@@ -26,8 +26,10 @@ from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
 
 # TODO's:
 # - Make conditioned generation work... Ideas: >>>DOING<<<
-#   - try a simple OHE
-#   - try adding cross-attention layers attending *class names* directly? Might seem weird but it's actually what us humans are doing!
+# - pay attention to value range: images are in [-1; 1], where's the embedding?
+# - try passing the embedding later on in the net
+# - try a simple OHE
+# - try adding cross-attention layers attending *class names* directly? Might seem weird but it's actually what us humans are doing!
 # Then cross-attention layers in the UNet to incorporate this information into the denoising path
 # (that's +/- how Stable Diffusion handles text conditioning, reportedly)
 # (also fun to implement this, but probably time-consuming)
