@@ -7,7 +7,6 @@ import time
 
 import torch
 from diffusers import DDIMScheduler
-from diffusers.models import UNet2DModel
 from torch import nn
 from tqdm import tqdm
 from tqdm.auto import trange
@@ -22,6 +21,7 @@ from utils import (
     save_loss_plot,
 )
 from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
+from model import ClassConditionedUnet
 
 # TODO's:
 # - Adapt loss to unbalanced classes
@@ -127,28 +127,9 @@ logfile.write(f"num_inference_steps: {args['num_inference_steps']}\n")
 
 ## Model
 # UNet-like architecture with 4 down and upsampling blocks with self-attention down the U.
+# Made conditional.
 num_classes = len(args["selected_datasets"])
-model = UNet2DModel(
-    sample_size=args["image_size"],  # the target image resolution
-    in_channels=3,  # the number of input channels, 3 for RGB images
-    out_channels=3,  # the number of output channels
-    layers_per_block=2,  # how many ResNet layers to use per UNet block
-    block_out_channels=(64, 128, 128, 256),
-    down_block_types=(
-        "DownBlock2D",  # a regular ResNet downsampling block
-        "DownBlock2D",
-        "AttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-        "AttnDownBlock2D",
-    ),
-    up_block_types=(
-        "AttnUpBlock2D",
-        "AttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-        "UpBlock2D",
-        "UpBlock2D",  # a retorch_dtype=torch.float16gular ResNet upsampling block
-    ),
-    class_embed_type=None,  # None = nn.Embedding (...)
-    num_class_embeds=len(args["selected_datasets"]),
-)
+model = ClassConditionedUnet(num_classes, args["class_emb_dim"], args["image_size"])
 model.to(device)
 
 # the model is compiled (will only work with `torch>=2.0.0`); this will take quite some time at first pass

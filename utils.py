@@ -118,7 +118,10 @@ def define_config_file_parser() -> ArgumentParser:
         default="False",
     )
     configfile_parser.add_argument(
-        "--class_emb_size", type=int, required=True, help="Size of the class embedding"
+        "--class_emb_dim",
+        type=int,
+        required=True,
+        help="Dimension of the class embedding",
     )
     return configfile_parser
 
@@ -222,7 +225,7 @@ def _manual_image_gen(
             image_size,
         ),
         device=device,
-        dtype=model.dtype,
+        dtype=model.dtype if hasattr(model, "dtype") else None,
     )
     classes = classes.to(device)
     for t in range(len(scheduler.timesteps)):
@@ -349,15 +352,15 @@ def compute_metrics(
         )
         dataset_folder = Path(args["root_data_dir"], ds_name)
         metrics_dict = torch_fidelity.calculate_metrics(
-            input1=dataset_folder,
-            input2=generated_images_folder,
+            input1=dataset_folder.as_posix(),
+            input2=generated_images_folder.as_posix(),
             cuda=True,
             batch_size=args["batch_size"],
             isc=True,
             fid=True,
-            kid=True,
-            ppl=True,
-            verbose=True,
+            # kid=True,
+            # ppl=True,
+            verbose=False,
             cache_root=".fidelity_cache",
             input1_cache_name=f"{ds_name}",  # forces caching
             rng_seed=42,
