@@ -5,7 +5,7 @@ from math import ceil
 from pathlib import Path
 
 import torch
-from datasets import DatasetDict, load_dataset
+from datasets import load_dataset
 from torchvision import transforms
 from utils import header_print
 
@@ -21,7 +21,10 @@ def load_BBBC021_comp_conc_nice_phen(root_data_dir: str, selected_ds_names: list
     for ds_name in selected_ds_names:
         ds_path = Path(root_data_dir, ds_name)
         ds = load_dataset(
-            "imagefolder", data_dir=ds_path, cache_dir="./.HF_cache", drop_labels=False
+            "imagefolder",
+            data_dir=ds_path.as_posix(),
+            cache_dir="./.HF_cache",
+            drop_labels=False,
         )["train"]
         ds_list.append(ds)
 
