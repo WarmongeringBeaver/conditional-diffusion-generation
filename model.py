@@ -1,9 +1,12 @@
-"""Conditional Unet2D model."""
+"""Conditional Unet2D model.
+
+Shamelessly copied from HF's excellent course on diffusion models.
+"""
 
 import torch
-from torch import nn
 from diffusers.models import UNet2DModel
 from diffusers.models.unet_2d import UNet2DOutput
+from torch import nn
 
 
 class ClassConditionedUnet(nn.Module):
@@ -35,21 +38,32 @@ class ClassConditionedUnet(nn.Module):
         )
 
     # Our forward method now takes the class labels as an additional argument
-    def forward(self, x, t, class_labels) -> UNet2DOutput:
-        # Shape of x:
-        bs, _, w, h = x.shape
+    def forward(
+        self, images: torch.Tensor, timesteps: torch.Tensor, class_labels: torch.Tensor
+    ) -> UNet2DOutput:
+        ### Shape of images:
+        bs, _, w, h = images.shape
 
+        ### Checks
+        assert (
+            class_labels.shape[0] == bs
+        ), "Batch size of images and class labels must match"
+
+        assert timesteps.shape[0] == bs, "Batch size of images and timesteps must match"
+
+        ### Forward pass
         # class conditioning in right shape to add as additional input channels
-        class_cond = self.class_emb(class_labels)  # Map to embedding dinemsion
+        class_cond = self.class_emb(class_labels)
         class_cond = class_cond.view(bs, class_cond.shape[1], 1, 1).expand(
             bs, class_cond.shape[1], w, h
         )
-        # x is shape (bs, 3, image_size, image_size);
+        # images is shape (bs, 3, image_size, image_size);
         # class_cond is now (bs, class_emb_dim, image_size, image_size)
 
-        # Net input is now x and class cond concatenated together along dimension 1
-        net_input = torch.cat((x, class_cond), 1)
+        # Net input is now images and class_cond concatenated together along dimension 1
+        net_input = torch.cat((images, class_cond), 1)
         # (bs, 3+class_emb_dim, image_size, image_size)
 
         # Feed this to the unet alongside the timestep and return the prediction
-        return self.model(net_input, t)  # .sample: (bs, 3, image_size, image_size)
+        return self.model(net_input, timesteps)
+        # .sample: (bs, 3, image_size, image_size)
