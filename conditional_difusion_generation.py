@@ -11,6 +11,7 @@ from torch import nn
 from tqdm import tqdm
 from tqdm.auto import trange
 
+from model import ClassConditionedUnet
 from utils import (
     compute_metrics,
     generate_samples,
@@ -21,18 +22,13 @@ from utils import (
     save_loss_plot,
 )
 from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
-from model import ClassConditionedUnet
 
 # TODO's:
-# - Adapt loss to unbalanced classes
+# - Adapt loss to unbalanced classes?
 # - use HF Accelerate to train on multiple GPUs
-# - remove rogue prints about Qt (is it matplotlib?) and rogue tqdm bar (pytorch_fid)  >>>DOING?<<<
-#       note: prints appear juste before rogue tqdm bar, maybe both are caused by pytorch_fid?
-#       -> requires PR on GH... => shamelessly steal & modify code in local? :)
 # - profile!
 # - save performance statistics (time, memory, etc.) along training
-# - implement other metrics: -> pytorch-fidelity >>>DOING<<<
-#   - IS
+# - use other metrics (w/ pytorch-fidelity)
 #   - Perceptual Distance
 #   - ..?
 #   - Classification accuracy if Anis has a pretrained classifier?

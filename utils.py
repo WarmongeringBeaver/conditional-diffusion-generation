@@ -23,7 +23,7 @@ from matplotlib import pyplot as plt
 from PIL import Image
 
 # TODO's:
-# - take parameters from config (& log them) for compute_FIDs
+# - take parameters from config (& log them) for compute_metrics
 # - directly give args as in-code python dict?
 
 
@@ -73,14 +73,14 @@ def define_config_file_parser() -> ArgumentParser:
         "--generate_every",
         type=int,
         default=10,
-        help="Generate & compute FID every GENERATE_EVERY epochs",
+        help="Generate & compute metrics every GENERATE_EVERY epochs",
     )
     hlp_msg = "Number of generated images every GENERATE_EVERY epoch. "
     hlp_msg += "Important for the FID computation reliability. Authors recommend at least 10,000! "
     hlp_msg += "See https://github.com/bioinf-jku/TTUR for original TF implementation."
     configfile_parser.add_argument(
         "--nb_generated_images",
-        help="Number of generated images every GENERATE_EVERY epoch. Important for the FID computation reliability!",
+        help=hlp_msg,
         type=int,
         required=True,
     )
@@ -105,14 +105,6 @@ def define_config_file_parser() -> ArgumentParser:
     configfile_parser.add_argument(
         "--compile",
         help="Compile the model?",
-        type=str,
-        choices=["True", "False"],
-        default="False",
-    )
-    configfile_parser.add_argument("--Inception_feat_dim", type=int, required=True)
-    configfile_parser.add_argument(
-        "--FID_recompute",
-        help="Recompute FID statistics?",
         type=str,
         choices=["True", "False"],
         default="False",
@@ -294,8 +286,8 @@ def save_loss_plot(
     save_folder = this_experiment_folder + "/outputs"
     plt.savefig(save_folder + "/loss_plot.png", bbox_inches="tight", dpi=300)
     # write logscale image to file
-    plt.yscale("log")
-    plt.savefig(save_folder + "/loss_log_plot.png", bbox_inches="tight", dpi=300)
+    # plt.yscale("log")
+    # plt.savefig(save_folder + "/loss_log_plot.png", bbox_inches="tight", dpi=300)
     plt.close()
     # save list of loss values
     np.save(save_folder + "/losses.npy", losses_per_epoch)
@@ -366,6 +358,73 @@ def compute_metrics(
             rng_seed=42,
         )
         metrics_per_epoch[-1][ds_name] = metrics_dict
+    # pickle FID score & plot
+    _save_and_plot_metrics(
+        metrics_per_epoch, this_experiment_folder, args["generate_every"]
+    )
+
+
+def _save_and_plot_metrics(
+    metrics_per_epoch: list[dict],
+    this_experiment_folder: str,
+    generate_every: int,
+    # window_width: int = 10,
+) -> None:
+    """Saves the metrics dict & plot the metrics.
+    
+    Arguments
+    ---------
+    - metrics_per_epoch: list of dicts\\
+        Each dict containing the metrics for each dataset; structure:
+        
+        ```
+        metrics_per_epoch[epoch][dataset_name][metric_name] = metric_value
+        ```
+        
+        where `metric_name` comes from `torch_fidelity`.
+    """
+    # refresh live plot for each metric score
+    plt.style.use("ggplot")
+    save_folder = this_experiment_folder + "/outputs"
+    current_nb_epochs = len(metrics_per_epoch) * generate_every
+    # load past metrics values & update plot for each metric
+    computed_metric_names = next(iter(metrics_per_epoch[0].items()))[1].keys()
+    # one plot per metric
+    for metric_name in computed_metric_names:
+        # all datasets are compared on the same plot
+        for ds_name in metrics_per_epoch[0].keys():
+            this_metric_for_this_ds = [
+                metrics_per_epoch[t][ds_name][metric_name]
+                for t in range(len(metrics_per_epoch))
+            ]
+            plt.plot(
+                list(range(1, current_nb_epochs + 1, generate_every)),
+                this_metric_for_this_ds,
+                label=ds_name,
+            )
+            # # add moving average -> BROKEN
+            # if len(FIDs_for_this_ds) >= window_width:
+            #     cumsum_vec = np.cumsum(np.insert(FIDs_for_this_ds, 0, 0))
+            #     ma_vec = (
+            #         cumsum_vec[window_width:] - cumsum_vec[:-window_width]
+            #     ) / window_width
+            #     plt.plot(
+            #         list(range(window_width, current_nb_epochs + 1, generate_every)),
+            #         ma_vec,
+            #         label=f"{ds_name} (running average)",
+            #     )
+        plt.xlabel("iteration")
+        plt.ylabel(metric_name)
+        plt.legend()
+        plt.title(f"{metric_name} for each dataset over epochs")
+        # write image to file
+        plt.savefig(
+            save_folder + f"/{metric_name}_plot.png", bbox_inches="tight", dpi=400
+        )
+        plt.close()
+    # save metrics_per_epoch
+    with open(save_folder + "/metrics_per_epoch.pickle", "wb") as handle:
+        pickle.dump(metrics_per_epoch, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 ########################################################################################
