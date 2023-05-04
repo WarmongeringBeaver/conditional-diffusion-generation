@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 from datasets import load_dataset
 from torchvision import transforms
+
 from utils import header_print
 
 # TODO's:
@@ -54,16 +55,12 @@ def preprocess_dataset(
     )
     # Map to (-1, 1) because of th SILU activation function used (by default) in the UNet2DModel
 
-    def transform(class_idx):
-        def transform_for_this_class(examples):
-            images = [preprocess(image.convert("RGB")) for image in examples["image"]]
-            classes = torch.tensor([class_idx] * len(examples))
-            return {"images": images, "classes": classes}
-
-        return transform_for_this_class
+    def transform(examples):
+        images = [preprocess(image.convert("RGB")) for image in examples["image"]]
+        return {"images": images}
 
     for class_idx, dataset in enumerate(full_dataset.datasets):
-        dataset.set_transform(transform(class_idx))
+        dataset.set_transform(transform)
 
     # create a dataloader to serve up the transformed images in batches
     batch_size = args["batch_size"]

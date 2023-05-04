@@ -1,5 +1,5 @@
 """
-Conditional DDIM training script.
+UNConditional DDIM training script.
 """
 
 import os
@@ -29,7 +29,9 @@ from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
 #   - pay attention to value range: images are in [-1; 1], where's the embedding?
 #   - try passing the embedding later on in the net
 #   - try a simple OHE
-#   - try adding cross-attention layers attending *class names* directly? Might seem weird but it's actually what us humans are doing!
+#   - try adding cross-attention layers attending *class names* directly?
+#   - try guidance like in (https://arxiv.org/abs/2105.05233)
+# Might seem weird but it's actually what us humans are doing!
 # Then cross-attention layers in the UNet to incorporate this information into the denoising path
 # (that's +/- how Stable Diffusion handles text conditioning, reportedly)
 # (also fun to implement this, but probably time-consuming)
@@ -133,18 +135,14 @@ logfile.write(f"num_inference_steps: {args['num_inference_steps']}\n\n")
 # UNet-like architecture with 4 down and upsampling blocks with self-attention down the U.
 # Made conditional.
 num_classes = len(args["selected_datasets"])
-model = ClassConditionedUnet(num_classes, args["class_emb_dim"], args["image_size"])
+model = ClassConditionedUnet(args["image_size"])
 model.to(device)
 # fancyprint model
 timesteps = torch.randint(0, 10000, (args["batch_size"],), device=device).long()
-class_labels = torch.randint(
-    0, len(args["selected_datasets"]), (args["batch_size"],), device=device
-).long()
 model_summary = summary(
     model,
     input_size=(args["batch_size"], 3, args["image_size"], args["image_size"]),
     timesteps=timesteps,
-    class_labels=class_labels,
     device=device,
     verbose=0,
     depth=7,
@@ -191,7 +189,6 @@ for epoch in iterator:
     for step, batch in enumerate(dataloader):
         iterator.set_postfix_str(f"Gradient descent: batch {step+1}/{nb_batches}")
         clean_images = batch["images"].to(device)
-        classes = batch["classes"].to(device)
 
         # Sample Gaussian noise to add to the images
         noise = torch.randn(clean_images.shape).to(device)
@@ -211,7 +208,7 @@ for epoch in iterator:
         )
 
         # Get the model prediction (not the noisy image, but the noise itself)
-        noise_pred = model(noisy_images, timesteps, classes).sample
+        noise_pred = model(noisy_images, timesteps).sample
 
         # Compute the loss
         loss = loss_func(noise_pred, noise)

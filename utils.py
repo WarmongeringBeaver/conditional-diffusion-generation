@@ -109,12 +109,6 @@ def define_config_file_parser() -> ArgumentParser:
         choices=["True", "False"],
         default="False",
     )
-    configfile_parser.add_argument(
-        "--class_emb_dim",
-        type=int,
-        required=True,
-        help="Dimension of the class embedding",
-    )
     return configfile_parser
 
 
@@ -162,8 +156,6 @@ def generate_samples(
 
     # generate samples iterating over datasets
     for ds_nb, ds_name in enumerate(args["selected_datasets"]):
-        # the class is this dataset idx
-        classes = torch.tensor([ds_nb] * args["batch_size"])
         postfix_str = f"Generating samples: dataset {ds_nb+1}/{len(args['selected_datasets'])} | batch "
         # save generated samples to a epoch/dataset–specific folder
         save_folder = Path(
@@ -190,7 +182,6 @@ def generate_samples(
                 device,
                 model,
                 scheduler,
-                classes[:actual_batch_size],
             )
             for idx, img in enumerate(images):
                 tot_idx = b * args["batch_size"] + idx
@@ -207,7 +198,6 @@ def _manual_image_gen(
     device,
     model,
     scheduler: DDIMScheduler,
-    classes,
 ) -> list:
     image = torch.randn(
         (
@@ -219,10 +209,9 @@ def _manual_image_gen(
         device=device,
         dtype=model.dtype if hasattr(model, "dtype") else None,
     )
-    classes = classes.to(device)
     for t in range(len(scheduler.timesteps)):
         # 1. predict noise model_output
-        model_output = model(image, t, classes).sample
+        model_output = model(image, t).sample
 
         # 2. predict previous mean of image x_t-1 and add variance depending on eta
         # eta corresponds to sigma in paper and should be between [0, 1]
