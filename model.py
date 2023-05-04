@@ -39,7 +39,10 @@ class ClassConditionedUnet(nn.Module):
 
     # Our forward method now takes the class labels as an additional argument
     def forward(
-        self, images: torch.Tensor, timesteps: torch.Tensor, class_labels: torch.Tensor
+        self,
+        images: torch.Tensor,
+        timesteps: torch.Tensor | int,
+        class_labels: torch.Tensor,
     ) -> UNet2DOutput:
         ### Shape of images:
         bs, _, w, h = images.shape
@@ -49,9 +52,10 @@ class ClassConditionedUnet(nn.Module):
             class_labels.shape[0] == bs
         ), f"Batch size of images and class labels must match: images.shape = {images.shape}, class_labels.shape = {class_labels.shape}"
 
-        assert (
-            timesteps.shape[0] == bs
-        ), f"Batch size of images and timesteps must match: images.shape = {images.shape}, timesteps.shape = {timesteps.shape}"
+        if type(timesteps) == torch.Tensor:
+            assert (
+                timesteps.shape[0] == bs
+            ), f"Batch size of images and timesteps must match: images.shape = {images.shape}, timesteps.shape = {timesteps.shape}"
 
         ### Forward pass
         # class conditioning in right shape to add as additional input channels
