@@ -8,12 +8,6 @@ First:
 {micromamba,mamba,conda} install -f environment.yml
 ```
 
-Then:
-
-```bash
-pip install pytorch-fid torch-fidelity
-```
-
 Don't forget to:
 
 ```bash
@@ -22,7 +16,10 @@ Don't forget to:
 
 ## Config & run
 
-Specified in a `TOML` file, passed in arg as:
+The full configuration is specified in a `TOML` file, passed in arg as:
 
 ```bash
 python conditional_diffusion_generation.py CONFIG_FILE_PATH
+```
+
+See `example-config.toml` for an example.

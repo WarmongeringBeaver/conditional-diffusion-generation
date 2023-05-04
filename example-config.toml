@@ -14,9 +14,8 @@ beta_schedule = "linear"
 nb_epochs = 500
 save_every = 50
 generate_every = 20
-nb_generated_images = 1000 # Authors recommend at least 10,000(!)
+nb_generated_images = 1000 # FID authors recommend at least 10,000(!)
 
 compile = "False" # booleans must be given in string format!
 
-
-class_emb_dim = 2
+class_emb_dim = 4
