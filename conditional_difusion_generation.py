@@ -26,10 +26,10 @@ from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
 
 # TODO's:
 # - Make conditioned generation work... Ideas: >>>DOING<<<
-# - pay attention to value range: images are in [-1; 1], where's the embedding?
-# - try passing the embedding later on in the net
-# - try a simple OHE
-# - try adding cross-attention layers attending *class names* directly? Might seem weird but it's actually what us humans are doing!
+#   - pay attention to value range: images are in [-1; 1], where's the embedding?
+#   - try passing the embedding later on in the net
+#   - try a simple OHE
+#   - try adding cross-attention layers attending *class names* directly? Might seem weird but it's actually what us humans are doing!
 # Then cross-attention layers in the UNet to incorporate this information into the denoising path
 # (that's +/- how Stable Diffusion handles text conditioning, reportedly)
 # (also fun to implement this, but probably time-consuming)
@@ -136,16 +136,18 @@ num_classes = len(args["selected_datasets"])
 model = ClassConditionedUnet(num_classes, args["class_emb_dim"], args["image_size"])
 model.to(device)
 # fancyprint model
-timesteps = torch.randint(0, 10000, (args["image_size"],), device=device).long()
+timesteps = torch.randint(0, 10000, (args["batch_size"],), device=device).long()
 class_labels = torch.randint(
-    0, len(args["selected_datasets"]), (args["image_size"],), device=device
+    0, len(args["selected_datasets"]), (args["batch_size"],), device=device
 ).long()
 model_summary = summary(
     model,
-    (args["batch_size"], 3, args["image_size"], args["image_size"]),
+    input_size=(args["batch_size"], 3, args["image_size"], args["image_size"]),
     timesteps=timesteps,
     class_labels=class_labels,
-    device="cuda",
+    device=device,
+    verbose=0,
+    depth=7,
 )
 logfile.write("model:\n")
 logfile.write(str(model_summary))
@@ -161,7 +163,7 @@ else:
     msg = "Skipping compilation, either because torch.compile is not available"
     msg += " or because --compile='False' was specified."
     my_warn(msg)
-    logfile.write(msg + "\n")
+    logfile.write(msg + "\n\n")
 
 ## Optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
