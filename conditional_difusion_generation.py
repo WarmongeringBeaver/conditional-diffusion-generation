@@ -7,12 +7,12 @@ import time
 
 import torch
 from diffusers import DDIMScheduler
+from diffusers.models import UNet2DModel
 from torch import nn
 from torchinfo import summary
 from tqdm import tqdm
 from tqdm.auto import trange
 
-from model import ClassConditionedUnet
 from utils import (
     compute_metrics,
     old_generate_samples_uncond,
@@ -135,14 +135,32 @@ logfile.write(f"num_inference_steps: {args['num_inference_steps']}\n\n")
 # UNet-like architecture with 4 down and upsampling blocks with self-attention down the U.
 # Made conditional.
 num_classes = len(args["selected_datasets"])
-model = ClassConditionedUnet(args["image_size"])
+model = UNet2DModel(
+    sample_size=args["image_size"],
+    in_channels=3,
+    out_channels=3,
+    layers_per_block=2,  # how many ResNet layers to use per UNet block
+    block_out_channels=(64, 128, 128, 256),
+    down_block_types=(
+        "DownBlock2D",  # a regular ResNet downsampling block
+        "DownBlock2D",
+        "AttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+        "AttnDownBlock2D",
+    ),
+    up_block_types=(
+        "AttnUpBlock2D",
+        "AttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+        "UpBlock2D",
+        "UpBlock2D",  # a regular ResNet upsampling block
+    ),
+)
 model.to(device)
 # fancyprint model
 timesteps = torch.randint(0, 10000, (args["batch_size"],), device=device).long()
 model_summary = summary(
     model,
     input_size=(args["batch_size"], 3, args["image_size"], args["image_size"]),
-    timesteps=timesteps,
+    timestep=timesteps,
     device=device,
     verbose=0,
     depth=7,
