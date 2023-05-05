@@ -15,7 +15,7 @@ from tqdm.auto import trange
 from model import ClassConditionedUnet
 from utils import (
     compute_metrics,
-    generate_samples,
+    old_generate_samples_uncond,
     header_print,
     my_warn,
     parse_wrapper,
@@ -240,7 +240,7 @@ for epoch in iterator:
     if epoch % args["generate_every"] == 0:
         # generate samples and write them to disk
         model.eval()
-        generate_samples(
+        old_generate_samples_uncond(
             model,
             noise_scheduler,
             device,

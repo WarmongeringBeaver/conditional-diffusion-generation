@@ -148,7 +148,7 @@ def generate_samples(
     iterator,
     logfile: TextIOBase,
 ):
-    """Conditional generation."""
+    """UNConditional generation."""
     # copy training scheduler to ensure no leakage to the training config
     scheduler: DDIMScheduler = DDIMScheduler.from_config(noise_scheduler.config)
     # set timestep to the number of *inference* steps
@@ -184,6 +184,48 @@ def generate_samples(
                 scheduler,
             )
             for idx, img in enumerate(images):
+                tot_idx = b * args["batch_size"] + idx
+                img.save(Path(save_folder, f"{tot_idx}.png"))
+        logfile.write(
+            f"Generated {args['nb_generated_images']} samples at epoch {epoch} in {save_folder}\n"
+        )
+
+
+@torch.no_grad()
+def old_generate_samples_uncond(
+    model,
+    noise_scheduler: DDIMScheduler,
+    device: str,
+    args: dict,
+    this_experiment_folder: str,
+    epoch: int,
+    iterator,
+    logfile: TextIOBase,
+):
+    # for now generation is unconditional but we mimic the conditional generation coming soon
+    image_pipe = DDIMPipeline(unet=model, scheduler=noise_scheduler).to(device)
+    image_pipe.set_progress_bar_config(disable=True)
+    for ds_nb, ds_name in enumerate(args["selected_datasets"]):
+        postfix_str = f"Generating samples: dataset {ds_nb+1}/{len(args['selected_datasets'])} | batch "
+        # generate samples
+        save_folder = Path(
+            this_experiment_folder,
+            "outputs",
+            f"epoch_{epoch}_generated_images",
+            ds_name,
+        )
+        os.makedirs(save_folder)
+        # batch generation to avoid (D)OOM
+        nb_inference_batches = ceil(args["nb_generated_images"] / args["batch_size"])
+        for b in range(nb_inference_batches):
+            postfix_str = postfix_str[: postfix_str.find("batch") + 6]
+            postfix_str += f"{b+1}/{nb_inference_batches}"
+            iterator.set_postfix_str(postfix_str)
+            pipeline_output = image_pipe(
+                batch_size=args["batch_size"],
+                num_inference_steps=args["num_inference_steps"],
+            )
+            for idx, img in enumerate(pipeline_output.images):
                 tot_idx = b * args["batch_size"] + idx
                 img.save(Path(save_folder, f"{tot_idx}.png"))
         logfile.write(

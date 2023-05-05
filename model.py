@@ -1,4 +1,4 @@
-"""Conditional Unet2D model.
+"""UNConditional Unet2D model.
 
 Shamelessly copied from HF's excellent course on diffusion models.
 """
