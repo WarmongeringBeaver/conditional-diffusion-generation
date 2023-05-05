@@ -157,7 +157,9 @@ model = UNet2DModel(
 )
 model.to(device)
 # fancyprint model
-timesteps = torch.randint(0, 10000, (args["batch_size"],), device=device).long()
+timesteps = torch.randint(
+    0, num_train_timesteps, (args["batch_size"],), device=device
+).long()
 model_summary = summary(
     model,
     input_size=(args["batch_size"], 3, args["image_size"], args["image_size"]),
