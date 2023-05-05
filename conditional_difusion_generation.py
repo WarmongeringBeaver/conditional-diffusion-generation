@@ -35,6 +35,7 @@ from utils_datasets import load_BBBC021_comp_conc_nice_phen, preprocess_dataset
 # Then cross-attention layers in the UNet to incorporate this information into the denoising path
 # (that's +/- how Stable Diffusion handles text conditioning, reportedly)
 # (also fun to implement this, but probably time-consuming)
+# - Fix IS being constant
 # - Adapt loss to unbalanced classes?
 # - use HF Accelerate to train on multiple GPUs
 # - profile!
