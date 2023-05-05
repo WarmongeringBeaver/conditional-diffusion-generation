@@ -34,6 +34,8 @@ class ClassConditionedUnet(nn.Module):
             ),
         )
 
+        self.dtype = self.model.dtype
+
     # Our forward method now takes the class labels as an additional argument
     def forward(
         self,
