@@ -1,8 +1,8 @@
 # %% [markdown]
 # # Making a Class-Conditioned Diffusion Model
-# 
-# In this notebook we're going to illustrate one way to add conditioning information to a diffusion model. Specifically, we'll train a class-conditioned diffusion model on MNIST following on from the ['from-scratch' example in Unit 1](https://github.com/huggingface/diffusion-models-class/blob/unit2/unit1/02_diffusion_models_from_scratch.ipynb), where we can specify which digit we'd like the model to generate at inference time. 
-# 
+#
+# In this notebook we're going to illustrate one way to add conditioning information to a diffusion model. Specifically, we'll train a class-conditioned diffusion model on MNIST following on from the ['from-scratch' example in Unit 1](https://github.com/huggingface/diffusion-models-class/blob/unit2/unit1/02_diffusion_models_from_scratch.ipynb), where we can specify which digit we'd like the model to generate at inference time.
+#
 # As mentioned in the introduction to this unit, this is just one of many ways we could add additional conditioning information to a diffusion model, and has been chosen for its relative simplicity. Just like the 'from-scratch' notebook in Unit 1, this notebook is mostly for illustrative purposes and you can safely skip it if you'd like.
 
 # %% [markdown]
@@ -17,9 +17,9 @@ import torchvision
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
-from diffusers import DDPMScheduler, UNet2DModel
+from diffusers import DDIMScheduler, UNet2DModel
 from matplotlib import pyplot as plt
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm, trange
 
 device = (
     "mps"
@@ -53,9 +53,9 @@ import os
 import time
 
 args = {
-    "run_desc": "more timesteps 128 oldgencond DMSO",
-    "root_data_dir": "/home/warpig/localtmp/",
-    "selected_datasets": ["DMSO"],
+    "run_desc": "test pure HF conditional script",
+    "root_data_dir": "/projects/imagesets/BBBC021/BBBC021_comp_conc_nice_phen",
+    selected_datasets = ["DMSO", "cytochalasin B_30.0"],
     "image_size": 128,
     "batch_size": 16,
     "num_train_timesteps": 1000,
@@ -67,7 +67,7 @@ args = {
     "save_every": 50,
     "generate_every": 1,
     "nb_generated_images": 300,
-    "compile": "False"
+    "compile": "False",
 }
 timestamp = time.gmtime()
 timestamp_str: str = time.strftime("%Y-%m-%dT%H:%M:%SZ", timestamp)
@@ -94,27 +94,29 @@ full_dataset = load_BBBC021_comp_conc_nice_phen(
 )
 dataloader, nb_batches = preprocess_dataset(full_dataset, args, logfile)
 
-# View some examples
-d = next(iter(dataloader))
-x, y = d["images"], d["classes"]
-print("Input shape:", x.shape)
-print("Labels:", y)
-img = torchvision.utils.make_grid(x[:8]).permute(1, 2, 0)
-plt.imshow((img + 1) /2)
-plt.show()
+# # View some examples
+# d = next(iter(dataloader))
+# x, y = d["images"], d["classes"]
+# print("Input shape:", x.shape)
+# print("Labels:", y)
+# img = torchvision.utils.make_grid(x[:8]).permute(1, 2, 0)
+# plt.imshow((img + 1) / 2)
+# # plt.show()
+# plt.close()
 
 # %% [markdown]
 # ## Creating a Class-Conditioned UNet
-# 
+#
 # The way we'll feed in the class conditioning is as follows:
-# - Create a standard `UNet2DModel` with some additional input channels  
+# - Create a standard `UNet2DModel` with some additional input channels
 # - Map the class label to a learned vector of shape `(class_emb_size)` via an embedding layer
 # - Concatenate this information as extra channels for the internal unet input with `net_input = torch.cat((x, class_cond), 1)`
 # - Feed this `net_input` (which has (`class_emb_size+1`) channels in total) into the unet to get the final prediction
-# 
-# In this example I've set the class_emb_size to 4, but this is completely arbitrary and you could explore having it size 1 (to see if it still works), size 10 (to match the number of classes), or replacing the learned nn.Embedding with a simple one-hot encoding of the class label directly. 
-# 
+#
+# In this example I've set the class_emb_size to 4, but this is completely arbitrary and you could explore having it size 1 (to see if it still works), size 10 (to match the number of classes), or replacing the learned nn.Embedding with a simple one-hot encoding of the class label directly.
+#
 # This is what the implementation looks like:
+
 
 # %%
 class ClassConditionedUnet(nn.Module):
@@ -161,21 +163,23 @@ class ClassConditionedUnet(nn.Module):
         # Feed this to the unet alongside the timestep and return the prediction
         return self.model(net_input, t).sample  # (bs, 3, 28, 28)
 
+
 # %% [markdown]
 # If any of the shapes or transforms are confusing, add in print statements to show the relevant shapes and check that they match your expectations. I've also annotated the shapes of some intermediate variables in the hopes of making things clearer.
 
 # %% [markdown]
 # ## Training and Sampling
-# 
+#
 # Where previously we'd do something like `prediction = unet(x, t)` we'll now add the correct labels as a third argument (`prediction = unet(x, t, y)`) during training, and at inference we can pass whatever labels we want and if all goes well the model should generate images that match. `y` in this case is the labels of the MNIST digits, with values from 0 to 9.
-# 
+#
 # The training loop is very similar to the [example from Unit 1](https://github.com/huggingface/diffusion-models-class/blob/unit2/unit1/02_diffusion_models_from_scratch.ipynb). We're now predicting the noise (rather than the denoised image as in Unit 1) to match the objective expected by the default DDPMScheduler which we're using to add noise during training and to generate samples at inference time. Training takes a while - speeding this up could be a fun mini-project, but most of you can probably just skim the code (and indeed this whole notebook) without running it since we're just illustrating an idea.
 
 # %%
 # Create a scheduler
-noise_scheduler = DDPMScheduler(
+noise_scheduler = DDIMScheduler(
     num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2"
 )
+noise_scheduler.set_timesteps(args["num_inference_steps"])
 
 # %%
 # @markdown Training loop (10 Epochs):
@@ -199,8 +203,12 @@ opt = torch.optim.Adam(net.parameters(), lr=1e-3)
 losses = []
 
 # The training loop
-for epoch in range(n_epochs):
-    for d in tqdm(dataloader):
+
+iterator = trange(n_epochs)
+
+for epoch in iterator:
+    for step, d in enumerate(dataloader):
+        iterator.set_postfix_str(f"Gradient descent: batch {step+1}/{nb_batches}")
         x, y = d["images"], d["classes"]
         # Get some data and prepare the corrupted version
         x = x.to(device) * 2 - 1  # Data on the GPU (mapped to (-1, 1))
@@ -229,8 +237,44 @@ for epoch in range(n_epochs):
         f"Finished epoch {epoch}. Average of the last 100 loss values: {avg_loss:05f}"
     )
 
+    # generate samples & compute metrics
+    if epoch % args["generate_every"] == 0:
+        # Prepare random x to start from, plus some desired labels y
+        x = torch.randn(
+            args["batch_size"], 3, args["image_size"], args["image_size"]
+        ).to(device)
+        y = (
+            torch.tensor(
+                [
+                    [i] * args["batch_size"]
+                    for i in range(len(args["selected_datasets"]))
+                ]
+            )
+            .flatten()
+            .to(device)
+        )
+        # generate samples and write them to disk
+        for t in range(args["num_inference_steps"]):
+            iterator.set_postfix_str(
+                f"Generating samples: step {t+1}/{args['num_inference_steps']}"
+            )
+            # Get model pred
+            with torch.no_grad():
+                residual = net(x, t, y)  # Again, note that we pass in our labels y
+
+            # Update sample with step
+            x = noise_scheduler.step(residual, t, x).prev_sample
+        # Show the results
+        fig, ax = plt.subplots(1, 1, figsize=(12, 12))
+        img = torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8).permute(
+            1, 2, 0
+        )
+        ax.imshow((img + 1) / 2)  # rescale to (0, 1)
+        plt.savefig(this_experiment_folder + "/outputs" + f"/sample_{epoch}.png")
+
 # View the loss curve
 plt.plot(losses)
+plt.savefig(this_experiment_folder + "/outputs" + "/loss_curve.png")
 
 # %% [markdown]
 # Once training finishes, we can sample some images feeding in different labels as our conditioning:
@@ -238,32 +282,30 @@ plt.plot(losses)
 # %%
 # @markdown Sampling some different digits:
 
-# Prepare random x to start from, plus some desired labels y
-x = torch.randn(80, 1, 28, 28).to(device)
-y = torch.tensor([[i] * 8 for i in range(10)]).flatten().to(device)
+# # Prepare random x to start from, plus some desired labels y
+# x = torch.randn(80, 1, 28, 28).to(device)
+# y = torch.tensor([[i] * 8 for i in range(10)]).flatten().to(device)
 
-# Sampling loop
-for i, t in tqdm(enumerate(noise_scheduler.timesteps)):
-    # Get model pred
-    with torch.no_grad():
-        residual = net(x, t, y)  # Again, note that we pass in our labels y
+# # Sampling loop
+# for i, t in tqdm(enumerate(noise_scheduler.timesteps)):
+#     # Get model pred
+#     with torch.no_grad():
+#         residual = net(x, t, y)  # Again, note that we pass in our labels y
 
-    # Update sample with step
-    x = noise_scheduler.step(residual, t, x).prev_sample
+#     # Update sample with step
+#     x = noise_scheduler.step(residual, t, x).prev_sample
 
-# Show the results
-fig, ax = plt.subplots(1, 1, figsize=(12, 12))
-ax.imshow(
-    torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)[0], cmap="Greys"
-)
+# # Show the results
+# fig, ax = plt.subplots(1, 1, figsize=(12, 12))
+# ax.imshow(
+#     torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)[0], cmap="Greys"
+# )
 
 # %% [markdown]
-# There we go! We can now have some control over what images are produced. 
-# 
+# There we go! We can now have some control over what images are produced.
+#
 # I hope you've enjoyed this example. As always, feel free to ask questions in the Discord.
 
 # %%
 # Exercise (optional): Try this with FashionMNIST. Tweak the learning rate, batch size and number of epochs.
 # Can you get some decet-looking fashion images with less training time than the example above?
-
-
