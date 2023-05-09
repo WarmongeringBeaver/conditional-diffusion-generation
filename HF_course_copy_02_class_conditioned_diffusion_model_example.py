@@ -55,7 +55,7 @@ import time
 args = {
     "run_desc": "test pure HF conditional script",
     "root_data_dir": "/projects/imagesets/BBBC021/BBBC021_comp_conc_nice_phen",
-    selected_datasets = ["DMSO", "cytochalasin B_30.0"],
+    "selected_datasets": ["DMSO", "cytochalasin B_30.0"],
     "image_size": 128,
     "batch_size": 16,
     "num_train_timesteps": 1000,
