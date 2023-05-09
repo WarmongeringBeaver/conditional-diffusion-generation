@@ -244,7 +244,7 @@ for epoch in iterator:
             args["batch_size"], 3, args["image_size"], args["image_size"]
         ).to(device)
         y = (
-            torch.randint(0, len(args["selected_datasets"]), args["batch_size"])
+            torch.randint(0, len(args["selected_datasets"]), (args["batch_size"],))
             .flatten()
             .to(device)
         )
