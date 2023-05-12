@@ -1,0 +1,7 @@
+REMOVEME*
+.tmp_image_generation_folder/
+.vscode/
+wandb/
+run_script.zsh
+.fidelity_cache/
+*.pyc
