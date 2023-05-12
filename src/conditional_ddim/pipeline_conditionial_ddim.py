@@ -15,13 +15,9 @@
 from typing import List, Optional, Tuple, Union
 
 import torch
-
+from diffusers.pipeline_utils import DiffusionPipeline, ImagePipelineOutput
 from diffusers.schedulers import DDIMScheduler
 from diffusers.utils import randn_tensor
-from diffusers.pipeline_utils import (
-    DiffusionPipeline,
-    ImagePipelineOutput,
-)
 
 
 class ConditionialDDIMPipeline(DiffusionPipeline):
