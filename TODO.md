@@ -1,6 +1,7 @@
 # TODO's
 
 - Visualize an interpolation
+- `UNet2DModel` ⇾ `UNet2DConditionModel` in training script (actually encapsulates all use cases)
 - Explore other conditioning schemes
   - pay attention to value range: images are in [-1; 1], where's the embedding?
   - try passing the embedding later on in the net
