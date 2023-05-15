@@ -6,3 +6,4 @@ run_script.zsh
 *.pyc
 experiments/
 data/
+accelerate_configs
