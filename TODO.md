@@ -21,3 +21,4 @@ Then cross-attention layers in the UNet to incorporate this information into the
 - try velocity model
 - try gradient accumulation
 - allow to choose compile strategy in args (max-autotune, etc.)
+- parallelize image generation
