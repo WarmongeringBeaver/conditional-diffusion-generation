@@ -607,7 +607,9 @@ def main(args):
                 if args.use_ema:
                     ema_model.restore(unet.parameters())
 
-            if epoch % args.save_model_epochs == 0 or epoch == args.num_epochs - 1:
+            if (
+                epoch % args.save_model_epochs == 0 or epoch == args.num_epochs - 1
+            ) and epoch != 0:
                 # save the model
                 unet = accelerator.unwrap_model(model)
 
