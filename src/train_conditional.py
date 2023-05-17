@@ -135,7 +135,9 @@ def main(args):
 
         # Create a temporary folder to save the generated images during training.
         # Used for metrics computations; a small number of these (eval_batch_size) is logged
-        image_generation_tmp_save_folder = Path(".tmp_image_generation_folder")
+        image_generation_tmp_save_folder = Path(
+            args.output_dir, ".tmp_image_generation_folder"
+        )
 
         # Create a folder to save the *full* pipeline
         full_pipeline_save_folder = Path(args.output_dir, "full_pipeline_save")
