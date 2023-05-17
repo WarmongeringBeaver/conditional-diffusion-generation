@@ -10,7 +10,6 @@ from math import ceil
 from pathlib import Path
 from shutil import rmtree
 
-import accelerate
 import datasets
 import diffusers
 import torch
@@ -33,7 +32,7 @@ from tqdm.auto import tqdm
 
 import wandb
 from conditional_ddim import ConditionialDDIMPipeline
-from utils import extract_into_tensor, get_full_repo_name, parse_args
+from utils import extract_into_tensor, get_full_repo_name, parse_args, split
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -141,6 +140,7 @@ def main(args):
         # Create a folder to save the *full* pipeline
         full_pipeline_save_folder = Path(args.output_dir, "full_pipeline_save")
         os.makedirs(full_pipeline_save_folder, exist_ok=True)
+    accelerator.wait_for_everyone()
 
     # Initialize the model
     if args.model_config_name_or_path is None:
@@ -320,9 +320,16 @@ def main(args):
     )
     max_train_steps = args.num_epochs * num_update_steps_per_epoch
 
-    nb_eval_batches = ceil(args.nb_generated_images / args.eval_batch_size)
-    actual_eval_batch_sizes = [args.eval_batch_size] * (nb_eval_batches - 1)
-    actual_eval_batch_sizes += [args.nb_generated_images % args.eval_batch_size]
+    # distribute "batches" for image generation
+    tot_nb_eval_batches = ceil(args.nb_generated_images / args.eval_batch_size)
+    glob_eval_bs = [args.eval_batch_size] * (tot_nb_eval_batches - 1)
+    glob_eval_bs += [
+        args.nb_generated_images - args.eval_batch_size * (tot_nb_eval_batches - 1)
+    ]
+    nb_proc = accelerator.num_processes
+    actual_eval_batch_sizes_for_this_process = split(
+        glob_eval_bs, nb_proc, accelerator.process_index
+    )
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(dataset)}")
@@ -486,99 +493,106 @@ def main(args):
 
         accelerator.wait_for_everyone()
 
-        if accelerator.is_main_process:
-            # Generate sample images for visual inspection
-            if (
-                epoch % args.save_images_epochs == 0 or epoch == args.num_epochs - 1
-            ) and epoch > 0:
-                progress_bar = tqdm(
-                    total=nb_eval_batches * args.nb_classes,
-                    desc="Generating images",
-                )
-                unet = accelerator.unwrap_model(model)
+        # Generate sample images for visual inspection
+        if (
+            epoch % args.save_images_epochs == 0 or epoch == args.num_epochs - 1
+        ) and epoch > 0:
+            progress_bar = tqdm(
+                total=tot_nb_eval_batches * args.nb_classes,
+                desc="Generating images",
+                disable=not accelerator.is_local_main_process,
+            )
+            unet = accelerator.unwrap_model(model)
 
-                if args.use_ema:
-                    ema_model.store(unet.parameters())
-                    ema_model.copy_to(unet.parameters())
+            if args.use_ema:
+                ema_model.store(unet.parameters())
+                ema_model.copy_to(unet.parameters())
 
-                pipeline = ConditionialDDIMPipeline(
-                    unet=unet,
-                    scheduler=noise_scheduler,
-                )
-                pipeline.set_progress_bar_config(disable=True)
+            pipeline = ConditionialDDIMPipeline(
+                unet=unet,
+                scheduler=noise_scheduler,
+            )
+            pipeline.set_progress_bar_config(disable=True)
 
-                # set manual seed in order to observe the "same" images
-                generator = torch.Generator(device=pipeline.device).manual_seed(0)
-                # run pipeline in inference (sample random noise and denoise)
-                # -> generate args.nb_generated_images in batches *per class*
-                for label_idx, label in enumerate(range(args.nb_classes)):
-                    # clean image_generation_tmp_save_folder (it's per-class)
+            # set manual seed in order to observe the "same" images
+            generator = torch.Generator(device=pipeline.device).manual_seed(0)
+            # run pipeline in inference (sample random noise and denoise)
+            # -> generate args.nb_generated_images in batches *per class*
+            for label_idx, label in enumerate(range(args.nb_classes)):
+                # clean image_generation_tmp_save_folder (it's per-class)
+                if accelerator.is_local_main_process:
                     if os.path.exists(image_generation_tmp_save_folder):
                         rmtree(image_generation_tmp_save_folder)
                     os.makedirs(image_generation_tmp_save_folder, exist_ok=False)
+                accelerator.wait_for_everyone()
 
-                    # get class name
-                    class_name = dataset.classes[label]
+                # get class name
+                class_name = dataset.classes[label]
 
-                    # pretty bar
-                    postfix_str = (
-                        f"Current class: {class_name} ({label_idx+1}/{args.nb_classes})"
-                    )
-                    progress_bar.set_postfix_str(postfix_str)
+                # pretty bar
+                postfix_str = (
+                    f"Current class: {class_name} ({label_idx+1}/{args.nb_classes})"
+                )
+                progress_bar.set_postfix_str(postfix_str)
 
-                    # loop over eval batches
-                    for batch_idx in range(nb_eval_batches):
-                        actual_bs = actual_eval_batch_sizes[batch_idx]
-                        class_labels = torch.full(
-                            (actual_bs,), label, device=pipeline.device
-                        ).long()
-                        images = pipeline(
-                            class_labels,
-                            generator=generator,
-                            batch_size=actual_bs,
-                            num_inference_steps=args.ddim_num_inference_steps,
-                            output_type="numpy",
-                        ).images
+                # loop over eval batches for this process
+                for batch_idx, actual_bs in enumerate(
+                    actual_eval_batch_sizes_for_this_process
+                ):
+                    class_labels = torch.full(
+                        (actual_bs,), label, device=pipeline.device
+                    ).long()
+                    images = pipeline(
+                        class_labels,
+                        generator=generator,
+                        batch_size=actual_bs,
+                        num_inference_steps=args.ddim_num_inference_steps,
+                        output_type="numpy",
+                    ).images
 
-                        # save images to disk, writting over the previous ones
-                        images_pil = pipeline.numpy_to_pil(images)
-                        for idx, img in enumerate(images_pil):
-                            tot_idx = args.eval_batch_size * batch_idx + idx
-                            img.save(
-                                Path(image_generation_tmp_save_folder, f"{tot_idx}.png")
+                    # save images to disk
+                    images_pil = pipeline.numpy_to_pil(images)
+                    for idx, img in enumerate(images_pil):
+                        tot_idx = args.eval_batch_size * batch_idx + idx
+                        img.save(
+                            Path(
+                                image_generation_tmp_save_folder,
+                                f"process_{accelerator.local_process_index}_sample_{tot_idx}.png",
                             )
+                        )
 
-                        # denormalize the images and save to logger if first batch
-                        # (first batch only to prevent "logger overflow")
-                        if batch_idx == 0:
-                            images_processed = (images * 255).round().astype("uint8")
+                    # denormalize the images and save to logger if first batch
+                    # (first batch of main process only to prevent "logger overflow")
+                    if batch_idx == 0 and accelerator.is_main_process:
+                        images_processed = (images * 255).round().astype("uint8")
 
-                            if args.logger == "tensorboard":
-                                if is_accelerate_version(">=", "0.17.0.dev0"):
-                                    tracker = accelerator.get_tracker(
-                                        "tensorboard", unwrap=True
-                                    )
-                                else:
-                                    tracker = accelerator.get_tracker("tensorboard")
-                                tracker.add_images(
-                                    "test_samples",
-                                    images_processed.transpose(0, 3, 1, 2),
-                                    epoch,
+                        if args.logger == "tensorboard":
+                            if is_accelerate_version(">=", "0.17.0.dev0"):
+                                tracker = accelerator.get_tracker(
+                                    "tensorboard", unwrap=True
                                 )
-                            elif args.logger == "wandb":
-                                # Upcoming `log_images` helper coming in https://github.com/huggingface/accelerate/pull/962/files
-                                accelerator.get_tracker("wandb").log(
-                                    {
-                                        f"generated_samples/{class_name}": [
-                                            wandb.Image(img) for img in images_processed
-                                        ],
-                                        "epoch": epoch,
-                                    },
-                                    step=global_step,
-                                )
-                        progress_bar.update()
+                            else:
+                                tracker = accelerator.get_tracker("tensorboard")
+                            tracker.add_images(
+                                "test_samples",
+                                images_processed.transpose(0, 3, 1, 2),
+                                epoch,
+                            )
+                        elif args.logger == "wandb":
+                            # Upcoming `log_images` helper coming in https://github.com/huggingface/accelerate/pull/962/files
+                            accelerator.get_tracker("wandb").log(
+                                {
+                                    f"generated_samples/{class_name}": [
+                                        wandb.Image(img) for img in images_processed
+                                    ],
+                                    "epoch": epoch,
+                                },
+                                step=global_step,
+                            )
+                    progress_bar.update()
 
-                    # Compute metrics
+                # Compute metrics
+                if accelerator.is_main_process:
                     metrics_dict = torch_fidelity.calculate_metrics(
                         input1=args.train_data_dir + "/train" + f"/{class_name}",
                         input2=image_generation_tmp_save_folder.as_posix(),
@@ -604,31 +618,39 @@ def main(args):
                             step=global_step,
                         )
 
-                if args.use_ema:
-                    ema_model.restore(unet.parameters())
+                # resync everybody for each class
+                accelerator.wait_for_everyone()
 
-            if (
-                epoch % args.save_model_epochs == 0 or epoch == args.num_epochs - 1
-            ) and epoch != 0:
-                # save the model
-                unet = accelerator.unwrap_model(model)
+            if args.use_ema:
+                ema_model.restore(unet.parameters())
 
-                if args.use_ema:
-                    ema_model.store(unet.parameters())
-                    ema_model.copy_to(unet.parameters())
+        if (
+            accelerator.is_main_process
+            and (epoch % args.save_model_epochs == 0 or epoch == args.num_epochs - 1)
+            and epoch != 0
+        ):
+            # save the model
+            unet = accelerator.unwrap_model(model)
 
-                pipeline = ConditionialDDIMPipeline(
-                    unet=unet,
-                    scheduler=noise_scheduler,
-                )
+            if args.use_ema:
+                ema_model.store(unet.parameters())
+                ema_model.copy_to(unet.parameters())
 
-                pipeline.save_pretrained(full_pipeline_save_folder)
+            pipeline = ConditionialDDIMPipeline(
+                unet=unet,
+                scheduler=noise_scheduler,
+            )
 
-                if args.use_ema:
-                    ema_model.restore(unet.parameters())
+            pipeline.save_pretrained(full_pipeline_save_folder)
 
-                if args.push_to_hub:
-                    repo.push_to_hub(commit_message=f"Epoch {epoch}", blocking=False)
+            if args.use_ema:
+                ema_model.restore(unet.parameters())
+
+            if args.push_to_hub:
+                repo.push_to_hub(commit_message=f"Epoch {epoch}", blocking=False)
+
+        # resync everybody for each class
+        accelerator.wait_for_everyone()
 
     accelerator.end_training()
 

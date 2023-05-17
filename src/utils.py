@@ -339,3 +339,10 @@ def get_full_repo_name(
         return f"{username}/{model_id}"
     else:
         return f"{organization}/{model_id}"
+
+
+def split(l, n, idx):
+    """https://stackoverflow.com/questions/2130016/splitting-a-list-into-n-parts-of-approximately-equal-length"""
+    k, m = divmod(len(l), n)
+    l = [l[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
+    return l[idx]
