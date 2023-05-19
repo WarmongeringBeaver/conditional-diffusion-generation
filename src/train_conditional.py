@@ -6,7 +6,7 @@
 import inspect
 import logging
 import os
-from math import ceil
+from math import ceil, log
 from pathlib import Path
 from shutil import rmtree
 
@@ -619,7 +619,17 @@ def main(args):
                             },
                             step=global_step,
                         )
-
+                        # log additionally the log of the FID
+                        if metric_name == "frechet_inception_distance":
+                            accelerator.get_tracker("wandb").log(
+                                {
+                                    f"log_frechet_inception_distance/{class_name}": metrics_dict[
+                                        log(metric_name)
+                                    ],
+                                    "epoch": epoch,
+                                },
+                                step=global_step,
+                            )
                 # resync everybody for each class
                 accelerator.wait_for_everyone()
 
