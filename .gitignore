@@ -8,3 +8,4 @@ experiments/
 data/
 accelerate_configs
 TODO.md
+.ipynb_checkpoints/
