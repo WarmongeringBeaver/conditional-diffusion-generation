@@ -23,5 +23,6 @@ accelerate launch --config_file $1 src/train_conditional.py \
   --resume_from_checkpoint="latest" \
   --checkpoints_total_limit=5 \
   --checkpointing_steps=1000 \
+  --ddim_beta_schedule="cosine" \
 
 # Call `train_conditional.py --help` to get the full list of args!
