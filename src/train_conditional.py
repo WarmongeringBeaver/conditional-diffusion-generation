@@ -406,12 +406,12 @@ def main(args):
 
             # Sample noise that we'll add to the images
             noise = torch.randn(clean_images.shape).to(clean_images.device)
-            bsz = clean_images.shape[0]
+
             # Sample a random timestep for each image
             timesteps = torch.randint(
                 0,
                 noise_scheduler.config.num_train_timesteps,
-                (bsz,),
+                (clean_images.shape[0],),
                 device=clean_images.device,
             ).long()
 
@@ -425,7 +425,6 @@ def main(args):
 
                 if args.prediction_type == "epsilon":
                     loss = F.mse_loss(model_output, noise)
-                    # TODO: weight according to timesteps
                 elif args.prediction_type == "sample":
                     alpha_t = extract_into_tensor(
                         noise_scheduler.alphas_cumprod,
