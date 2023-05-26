@@ -1,36 +1,9 @@
-# Utilities.
-
-# TODO's:
-# - infer nb_classes from the dataset
-
 import argparse
 import os
-from typing import Optional
-
-import torch
-from huggingface_hub import HfFolder, whoami
-
-
-def extract_into_tensor(arr, timesteps, broadcast_shape):
-    """
-    Extract values from a 1-D numpy array for a batch of indices.
-
-    :param arr: the 1-D numpy array.
-    :param timesteps: a tensor of indices into the array to extract.
-    :param broadcast_shape: a larger shape of K dimensions with the batch
-                            dimension equal to the length of timesteps.
-    :return: a tensor of shape [batch_size, 1, ...] where the shape has K dims.
-    """
-    if not isinstance(arr, torch.Tensor):
-        arr = torch.from_numpy(arr)
-    res = arr[timesteps].float().to(timesteps.device)
-    while len(res.shape) < len(broadcast_shape):
-        res = res[..., None]
-    return res.expand(broadcast_shape)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Simple example of a training script.")
+    parser = argparse.ArgumentParser(description="The main training script.")
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -73,7 +46,7 @@ def parse_args():
         "--nb_classes",
         type=int,
         required=True,
-        help="The number of classes in the dataset.",
+        help="The number of classes in the dataset. TODO: auto infer!",
     )
     parser.add_argument(
         "--output_dir",
@@ -151,6 +124,18 @@ def parse_args():
         type=int,
         default=100,
         help="How often to save the model during training.",
+    )
+    parser.add_argument(
+        "--guidance_factor",
+        type=float,
+        default=4,
+        help="The scaling factor of the guidance ('ω' in the Classifier-Free Diffusion Guidance paper: https://arxiv.org/pdf/2207.12598.pdf).",
+    )
+    parser.add_argument(
+        "--proba_uncond",
+        type=float,
+        default=0.1,
+        help="The probability of performing unconditional generation at each step. See Classifier-Free Diffusion Guidance (https://arxiv.org/pdf/2207.12598.pdf).",
     )
     parser.add_argument(
         "--gradient_accumulation_steps",
@@ -282,6 +267,8 @@ def parse_args():
     parser.add_argument("--ddim_num_steps", type=int, default=1000)
     parser.add_argument("--ddim_num_inference_steps", type=int, default=50)
     parser.add_argument("--ddim_beta_schedule", type=str, default="squaredcos_cap_v2")
+    parser.add_argument("--ddim_beta_start", type=float, default=0.0001)
+    parser.add_argument("--ddim_beta_end", type=float, default=0.02)
     parser.add_argument(
         "--checkpointing_steps",
         type=int,
@@ -327,22 +314,3 @@ def parse_args():
         )
 
     return args
-
-
-def get_full_repo_name(
-    model_id: str, organization: Optional[str] = None, token: Optional[str] = None
-):
-    if token is None:
-        token = HfFolder.get_token()
-    if organization is None:
-        username = whoami(token)["name"]
-        return f"{username}/{model_id}"
-    else:
-        return f"{organization}/{model_id}"
-
-
-def split(l, n, idx):
-    """https://stackoverflow.com/questions/2130016/splitting-a-list-into-n-parts-of-approximately-equal-length"""
-    k, m = divmod(len(l), n)
-    l = [l[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
-    return l[idx]
