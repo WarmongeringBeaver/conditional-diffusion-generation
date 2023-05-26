@@ -46,6 +46,7 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
     def __call__(
         self,
         class_labels: torch.Tensor,
+        w: float,
         batch_size: int = 1,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         eta: float = 0.0,
@@ -58,6 +59,8 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
         Args:
             class_labels (`torch.Tensor`):
                 The class labels to condition on. Should be a tensor of shape `(batch_size,)`.
+            w (`float`):
+                The guidance factor. Should be a float between 0 and 1.
             batch_size (`int`, *optional*, defaults to 1):
                 The number of images to generate.
             generator (`torch.Generator`, *optional*):
@@ -112,13 +115,34 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
 
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output
-            model_output = self.unet(image, t, class_labels).sample
+            cond_output = self.unet(
+                sample=image,
+                timestep=t,
+                class_labels=class_labels,
+            ).sample
+
+            # 2. Form the classifier-free guided score
+            if w != 0:
+                # unconditionally predict noise model_output
+                uncond_output = self.unet(
+                    sample=image,
+                    timestep=t,
+                    class_labels=None,
+                    class_emb=torch.zeros(
+                        (class_labels.shape[0], self.unet.time_embed_dim)
+                    ).to(class_labels.device),
+                ).sample
+
+                guided_score = (1 + w) * cond_output - w * uncond_output
+
+            else:
+                guided_score = cond_output
 
             # 2. predict previous mean of image x_t-1 and add variance depending on eta
             # eta corresponds to η in paper and should be between [0, 1]
             # do x_t -> x_t-1
             image = self.scheduler.step(
-                model_output,
+                guided_score,
                 t,
                 image,
                 eta=eta,
