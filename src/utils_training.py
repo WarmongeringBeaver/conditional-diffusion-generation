@@ -209,9 +209,9 @@ def _forward_backward_pass(
         step=global_step,
     )
     if do_unconditional_pass:
-        class_emb = torch.zeros((class_labels.shape[0], model.time_embed_dim)).to(
-            class_labels.device
-        )
+        class_emb = torch.zeros(
+            (class_labels.shape[0], accelerator.unwrap_model(model).time_embed_dim)
+        ).to(accelerator.device)
         class_labels = None
     else:
         class_emb = None
