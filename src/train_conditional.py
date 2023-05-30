@@ -70,6 +70,16 @@ def main(args):
         full_pipeline_save_folder,
         repo,
     ) = create_repo_structure(args, accelerator)
+    
+    # ------------------------- Dataset ------------------------
+    dataset, nb_classes = setup_dataset(args, logger)
+
+    train_dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=args.train_batch_size,
+        shuffle=True,
+        num_workers=args.dataloader_num_workers,
+    )
 
     # -------------------------- Model -------------------------
     if args.model_config_name_or_path is None:
@@ -96,7 +106,7 @@ def main(args):
                 "UpBlock2D",
             ),
             class_embed_type=None,  # = nn.Embedding...
-            num_class_embeds=args.nb_classes,
+            num_class_embeds=nb_classes,
         )
     else:
         config = UNet2DModel.load_config(args.model_config_name_or_path)
@@ -148,16 +158,6 @@ def main(args):
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
-    )
-
-    # ------------------------- Dataset ------------------------
-    dataset = setup_dataset(args, logger)
-
-    train_dataloader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=args.train_batch_size,
-        shuffle=True,
-        num_workers=args.dataloader_num_workers,
     )
 
     # ----------------- Learning rate scheduler -----------------

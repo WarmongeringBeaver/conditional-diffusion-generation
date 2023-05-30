@@ -43,12 +43,6 @@ def parse_args():
         help="Whether to use the PyTorch ImageFolder loader instead of the HF Dataset loader. Usefull for folder symlinks...",
     )
     parser.add_argument(
-        "--nb_classes",
-        type=int,
-        required=True,
-        help="The number of classes in the dataset. TODO: auto infer!",
-    )
-    parser.add_argument(
         "--output_dir",
         type=str,
         required=True,
