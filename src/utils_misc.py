@@ -110,16 +110,17 @@ def load_model_hook(models, input_dir, args, ema_model, accelerator):
     accelerator.register_load_state_pre_hook(load_model_hook)
 
 
-def create_repo_structure(args):
+def create_repo_structure(args, accelerator):
     repo = None
     if args.push_to_hub:
+        raise NotImplementedError()
         if args.hub_model_id is None:
             repo_name = get_full_repo_name(
                 Path(args.output_dir).name, token=args.hub_token
             )
         else:
             repo_name = args.hub_model_id
-        create_repo(repo_name, exist_ok=True, token=args.hub_token)
+            create_repo(repo_name, exist_ok=True, token=args.hub_token)
         repo = Repository(args.output_dir, clone_from=repo_name, token=args.hub_token)
 
         with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
@@ -127,14 +128,21 @@ def create_repo_structure(args):
                 gitignore.write("step_*\n")
             if "epoch_*" not in gitignore:
                 gitignore.write("epoch_*\n")
-    elif args.output_dir is not None:
+    elif args.output_dir is not None and accelerator.is_main_process:
         os.makedirs(args.output_dir, exist_ok=True)
 
     # Create a folder to save the *full* pipeline
     full_pipeline_save_folder = Path(args.output_dir, "full_pipeline_save")
-    os.makedirs(full_pipeline_save_folder, exist_ok=True)
+    if accelerator.is_main_process:
+        os.makedirs(full_pipeline_save_folder, exist_ok=True)
 
-    return full_pipeline_save_folder, repo
+    # Create a temporary folder to save the generated images during training.
+    # Used for metrics computations; a small number of these (eval_batch_size) is logged
+    image_generation_tmp_save_folder = Path(
+        args.output_dir, ".tmp_image_generation_folder"
+    )
+
+    return image_generation_tmp_save_folder, full_pipeline_save_folder, repo
 
 
 def setup_logger(logger, accelerator):

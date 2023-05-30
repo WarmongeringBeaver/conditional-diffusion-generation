@@ -11,6 +11,7 @@ from diffusers import DDIMScheduler
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
 
+import wandb
 from args_parser import parse_args
 from unet_2d import UNet2DModel
 from utils_dataset import setup_dataset
@@ -64,17 +65,11 @@ def main(args):
     setup_logger(logger, accelerator)
 
     # ------------------- Repository scruture ------------------
-    if accelerator.is_main_process:
-        (
-            full_pipeline_save_folder,
-            repo,
-        ) = create_repo_structure(args)
-    # Create a temporary folder to save the generated images during training.
-    # Used for metrics computations; a small number of these (eval_batch_size) is logged
-    image_generation_tmp_save_folder = Path(
-        args.output_dir, ".tmp_image_generation_folder"
-    )
-    accelerator.wait_for_everyone()
+    (
+        image_generation_tmp_save_folder,
+        full_pipeline_save_folder,
+        repo,
+    ) = create_repo_structure(args, accelerator)
 
     # -------------------------- Model -------------------------
     if args.model_config_name_or_path is None:
@@ -123,6 +118,9 @@ def main(args):
 
     if args.enable_xformers_memory_efficient_attention:
         setup_xformers_memory_efficient_attention(model, logger)
+
+    # track gradients
+    wandb.watch(model)
 
     # --------------------- Noise scheduler --------------------
     accepts_prediction_type = "prediction_type" in set(
@@ -206,7 +204,7 @@ def main(args):
     # ---------------------- Training loop ---------------------
     for epoch in range(first_epoch, args.num_epochs):
         # Training epoch
-        perform_training_epoch(
+        global_step = perform_training_epoch(
             model,
             num_update_steps_per_epoch,
             accelerator,
