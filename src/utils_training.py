@@ -301,9 +301,10 @@ def generate_samples_and_compute_metrics(
     guidance_factor,
     epoch,
     global_step,
+    nb_classes: int,
 ):
     progress_bar = tqdm(
-        total=tot_nb_eval_batches * args.nb_classes,
+        total=tot_nb_eval_batches * nb_classes,
         desc="Generating images",
         disable=not accelerator.is_local_main_process,
     )
@@ -324,7 +325,7 @@ def generate_samples_and_compute_metrics(
 
     # run pipeline in inference (sample random noise and denoise)
     # -> generate args.nb_generated_images in batches *per class*
-    for label_idx, label in enumerate(range(args.nb_classes)):
+    for label_idx, label in enumerate(range(nb_classes)):
         # clean image_generation_tmp_save_folder (it's per-class)
         if accelerator.is_local_main_process:
             if os.path.exists(image_generation_tmp_save_folder):
@@ -336,7 +337,7 @@ def generate_samples_and_compute_metrics(
         class_name = dataset.classes[label]
 
         # pretty bar
-        postfix_str = f"Current class: {class_name} ({label_idx+1}/{args.nb_classes})"
+        postfix_str = f"Current class: {class_name} ({label_idx+1}/{nb_classes})"
         progress_bar.set_postfix_str(postfix_str)
 
         # loop over eval batches for this process
