@@ -163,7 +163,7 @@ def perform_training_epoch(
 
         # Checks if the accelerator has performed an optimization step behind the scenes
         if accelerator.sync_gradients:
-            _syn_training_state(
+            global_step = _syn_training_state(
                 args, ema_model, model, progress_bar, global_step, accelerator, logger
             )
 
@@ -253,7 +253,7 @@ def _forward_backward_pass(
 
 def _syn_training_state(
     args, ema_model, model, progress_bar, global_step, accelerator, logger
-):
+) -> int:
     if args.use_ema:
         ema_model.step(model.parameters())
     progress_bar.update(1)
@@ -280,6 +280,8 @@ def _syn_training_state(
                     )
                 for dir in to_del:
                     rmtree(Path(args.output_dir, "checkpoints", dir))
+
+    return global_step
 
 
 def generate_samples_and_compute_metrics(
