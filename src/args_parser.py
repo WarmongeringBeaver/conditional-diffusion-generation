@@ -308,9 +308,4 @@ def parse_args():
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
 
-    if args.dataset_name is None and args.train_data_dir is None:
-        raise ValueError(
-            "You must specify either a dataset name from the hub or a train data directory."
-        )
-
     return args
