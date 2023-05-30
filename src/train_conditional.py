@@ -120,7 +120,8 @@ def main(args):
         setup_xformers_memory_efficient_attention(model, logger)
 
     # track gradients
-    wandb.watch(model)
+    if accelerator.is_main_process:
+        wandb.watch(model)
 
     # --------------------- Noise scheduler --------------------
     accepts_prediction_type = "prediction_type" in set(
