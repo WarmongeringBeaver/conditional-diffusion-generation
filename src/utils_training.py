@@ -21,11 +21,12 @@ def resume_from_checkpoint(args, logger, accelerator, num_update_steps_per_epoch
     else:
         # Get the most recent checkpoint
         chckpnts_dir = Path(args.output_dir, "checkpoints")
-        if not Path.exists(chckpnts_dir):
+        if not Path.exists(chckpnts_dir) and accelerator.is_main_process:
             logger.warning(
                 f"No 'checkpoints' directory found in output_dir {args.output_dir}; creating one."
             )
             os.makedirs(chckpnts_dir)
+        accelerator.wait_for_everyone()
         dirs = os.listdir(chckpnts_dir)
         dirs = sorted(dirs, key=lambda x: int(x.split("_")[1]))
         path = Path(chckpnts_dir, dirs[-1]).as_posix() if len(dirs) > 0 else None
@@ -172,6 +173,7 @@ def perform_training_epoch(
             "lr": lr_scheduler.get_last_lr()[0],
             "step": global_step,
             "epoch": epoch,
+            "log_loss": log(loss_value),
         }
         if args.use_ema:
             logs["ema_decay"] = ema_model.cur_decay_value
@@ -181,6 +183,8 @@ def perform_training_epoch(
 
     # wait for everybody at each end of training epoch
     accelerator.wait_for_everyone()
+
+    return global_step
 
 
 def _forward_backward_pass(
@@ -201,7 +205,7 @@ def _forward_backward_pass(
 ):
     # classifier-free guidance: randomly discard conditioning to train unconditionally
     do_unconditional_pass = rng.random() < args.proba_uncond
-    accelerator.get_tracker("wandb").log(
+    accelerator.log(
         {
             "unconditional step": int(do_unconditional_pass),
             "epoch": epoch,
@@ -377,10 +381,10 @@ def generate_samples_and_compute_metrics(
                     )
                 elif args.logger == "wandb":
                     # Upcoming `log_images` helper coming in https://github.com/huggingface/accelerate/pull/962/files
-                    accelerator.get_tracker("wandb").log(
+                    accelerator.log(
                         {
                             f"generated_samples/{class_name}": [
-                                wandb.Image(img) for img in images_processed
+                                wandb.Image(img) for img in images_processed[:50]
                             ],
                             "epoch": epoch,
                         },
@@ -405,24 +409,13 @@ def generate_samples_and_compute_metrics(
                 rng_seed=42,
             )
             for metric_name, metric_value in metrics_dict.items():
-                accelerator.get_tracker("wandb").log(
+                accelerator.log(
                     {
                         f"{metric_name}/{class_name}": metric_value,
                         "epoch": epoch,
                     },
                     step=global_step,
                 )
-                # log additionally the log of the FID
-                if metric_name == "frechet_inception_distance":
-                    accelerator.get_tracker("wandb").log(
-                        {
-                            f"log_frechet_inception_distance/{class_name}": log(
-                                metric_value
-                            ),
-                            "epoch": epoch,
-                        },
-                        step=global_step,
-                    )
         # resync everybody for each class
         accelerator.wait_for_everyone()
 
