@@ -58,8 +58,9 @@ def setup_dataset(args, logger):
         return {"images": images, "class_labels": class_labels}
 
     logger.info(f"Dataset size: {len(dataset)}")
+    logger.info(f"Number of classes: {len(dataset.classes)}")
 
     if not args.use_pytorch_loader:
         dataset.set_transform(transform_images)
 
-    return dataset
+    return dataset, len(dataset.classes)
