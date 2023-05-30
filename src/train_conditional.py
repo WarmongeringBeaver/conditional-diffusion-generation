@@ -1,11 +1,12 @@
 import inspect
 import os
+from pathlib import Path
 
 import numpy as np
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from accelerate.utils import ProjectConfiguration
+from accelerate.utils import DistributedDataParallelKwargs, ProjectConfiguration
 from diffusers import DDIMScheduler
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
@@ -41,11 +42,14 @@ def main(args):
         project_dir=args.output_dir,
     )
 
+    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with=args.logger,
         project_config=accelerator_project_config,
+        kwargs_handlers=[kwargs],
     )
 
     # -------------------------- WandB -------------------------
@@ -62,10 +66,14 @@ def main(args):
     # ------------------- Repository scruture ------------------
     if accelerator.is_main_process:
         (
-            image_generation_tmp_save_folder,
             full_pipeline_save_folder,
             repo,
         ) = create_repo_structure(args)
+    # Create a temporary folder to save the generated images during training.
+    # Used for metrics computations; a small number of these (eval_batch_size) is logged
+    image_generation_tmp_save_folder = Path(
+        args.output_dir, ".tmp_image_generation_folder"
+    )
     accelerator.wait_for_everyone()
 
     # -------------------------- Model -------------------------
