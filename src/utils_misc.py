@@ -1,8 +1,5 @@
 # Utilities.
 
-# TODO's:
-# - infer nb_classes from the dataset
-
 from typing import Optional
 from unet_2d import UNet2DModel
 from diffusers.training_utils import EMAModel

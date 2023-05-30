@@ -70,7 +70,7 @@ def main(args):
         full_pipeline_save_folder,
         repo,
     ) = create_repo_structure(args, accelerator)
-    
+
     # ------------------------- Dataset ------------------------
     dataset, nb_classes = setup_dataset(args, logger)
 
@@ -240,6 +240,7 @@ def main(args):
                 args.guidance_factor,
                 epoch,
                 global_step,
+                nb_classes,
             )
 
         if (
