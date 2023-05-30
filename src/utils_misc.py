@@ -68,6 +68,11 @@ def args_checker(args):
     if args.proba_uncond == 0:
         assert args.guidance_factor == 0, msg
 
+    if args.dataset_name is None and args.train_data_dir is None:
+        msg = "You must specify either a dataset name from the hub "
+        msg += "or a train data directory."
+        raise ValueError(msg)
+
 
 # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
 def save_model_hook(models, weights, output_dir, args, ema_model):
