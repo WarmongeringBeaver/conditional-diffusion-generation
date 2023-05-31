@@ -15,9 +15,12 @@ from conditional_ddim import ConditionialDDIMPipeline
 from utils_misc import extract_into_tensor, split
 
 
-def resume_from_checkpoint(args, logger, accelerator, num_update_steps_per_epoch):
+def resume_from_checkpoint(
+    args, logger, accelerator, num_update_steps_per_epoch, global_step
+):
     if args.resume_from_checkpoint != "latest":
         path = os.path.basename(args.resume_from_checkpoint)
+        path = os.path.join(args.output_dir, "checkpoints", path)
     else:
         # Get the most recent checkpoint
         chckpnts_dir = Path(args.output_dir, "checkpoints")
@@ -47,7 +50,7 @@ def resume_from_checkpoint(args, logger, accelerator, num_update_steps_per_epoch
         resume_step = resume_global_step % (
             num_update_steps_per_epoch * args.gradient_accumulation_steps
         )
-    return first_epoch, resume_step
+    return first_epoch, resume_step, global_step
 
 
 def get_training_setup(args, accelerator, train_dataloader, logger, dataset):
@@ -173,7 +176,7 @@ def perform_training_epoch(
             "lr": lr_scheduler.get_last_lr()[0],
             "step": global_step,
             "epoch": epoch,
-            "log_loss": log(loss_value),
+            "log(1+loss)": log(1 + loss_value),
         }
         if args.use_ema:
             logs["ema_decay"] = ema_model.cur_decay_value
