@@ -1,6 +1,5 @@
 import inspect
 import os
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -195,8 +194,8 @@ def main(args):
 
     # ----------------- Resume from checkpoint -----------------
     if args.resume_from_checkpoint:
-        first_epoch, resume_step = resume_from_checkpoint(
-            args, logger, accelerator, num_update_steps_per_epoch
+        first_epoch, resume_step, global_step = resume_from_checkpoint(
+            args, logger, accelerator, num_update_steps_per_epoch, global_step
         )
 
     # ---------------------- Seeds & RNGs ----------------------
