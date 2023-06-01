@@ -59,20 +59,25 @@ def split(l, n, idx):
 def args_checker(args):
     assert args.use_pytorch_loader, "Only PyTorch loader is supported for now."
 
-    msg = "The guidance factor is null "
-    msg += "but the probability to generate unconditionally is not 🧐"
     if args.guidance_factor == 0:
+        msg = "The guidance factor is null "
+        msg += "but the probability to generate unconditionally is not 🧐"
         assert args.proba_uncond == 0, msg
 
-    msg = "The probability to generate unconditionally is null "
-    msg += "but the guidance factor is not 🧐"
     if args.proba_uncond == 0:
+        msg = "The probability to generate unconditionally is null "
+        msg += "but the guidance factor is not 🧐"
         assert args.guidance_factor == 0, msg
 
     if args.dataset_name is None and args.train_data_dir is None:
         msg = "You must specify either a dataset name from the hub "
         msg += "or a train data directory."
         raise ValueError(msg)
+
+    if args.proba_uncond == 1:
+        msg = "The probability to generate unconditionally is 1 "
+        msg += "but the guidance factor is not None 🧐"
+        assert args.guidance_factor is None, msg
 
 
 # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
