@@ -89,7 +89,7 @@ def parse_args():
         "--eval_batch_size",
         type=int,
         default=16,
-        help="The number of images to generate for evaluation.",
+        help="The batch size (per GPU) for evaluation.",
     )
     parser.add_argument(
         "--dataloader_num_workers",
@@ -107,12 +107,9 @@ def parse_args():
         default=100,
         help="How often to save images during training.",
     )
-    parser.add_argument(
-        "--nb_generated_images",
-        type=int,
-        default=1000,
-        help="How many images to generate. Only the first batch will be logged and images not logged will be lost.",
-    )
+    help_msg = "How many images to generate (per class) for metrics computation. "
+    help_msg += "Only a fraction of the first batch will be logged; the rest will be lost."
+    parser.add_argument("--nb_generated_images", type=int, default=1000, help=help_msg)
     parser.add_argument(
         "--save_model_epochs",
         type=int,
