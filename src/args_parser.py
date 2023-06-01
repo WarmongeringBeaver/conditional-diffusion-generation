@@ -128,7 +128,7 @@ def parse_args():
     help_msg += "('ω' in the Classifier-Free Diffusion Guidance paper: https://arxiv.org/pdf/2207.12598.pdf)."
     help_msg += "Must be left blank if `proba_uncond` is set to 1."
     parser.add_argument(
-        "--guidance_factor", type=float, default=4, help=help_msg
+        "--guidance_factor", type=float, help=help_msg
     )
     help_msg = "The probability of performing unconditional generation at each step. "
     help_msg += (
@@ -138,7 +138,6 @@ def parse_args():
     parser.add_argument(
         "--proba_uncond",
         type=float,
-        default=0.1,
         help=help_msg,
     )
     parser.add_argument(
