@@ -105,7 +105,7 @@ def main(args):
                 "UpBlock2D",
             ),
             class_embed_type=None,  # = nn.Embedding...
-            num_class_embeds=nb_classes,
+            num_class_embeds=None if args.proba_uncond == 1 else nb_classes,
         )
     else:
         config = UNet2DModel.load_config(args.model_config_name_or_path)
