@@ -21,6 +21,12 @@ def parse_args():
         help="The config of the Dataset, leave as None if there's only one config.",
     )
     parser.add_argument(
+        "--split",
+        type=str,
+        default="train",
+        help="The split to use. Pass an empty string if there is no split in the dataset structure.",
+    )
+    parser.add_argument(
         "--model_config_name_or_path",
         type=str,
         default=None,
@@ -108,7 +114,9 @@ def parse_args():
         help="How often to save images during training.",
     )
     help_msg = "How many images to generate (per class) for metrics computation. "
-    help_msg += "Only a fraction of the first batch will be logged; the rest will be lost."
+    help_msg += (
+        "Only a fraction of the first batch will be logged; the rest will be lost."
+    )
     parser.add_argument("--nb_generated_images", type=int, default=1000, help=help_msg)
     parser.add_argument(
         "--save_model_epochs",
@@ -116,17 +124,22 @@ def parse_args():
         default=100,
         help="How often to save the model during training.",
     )
+    help_msg = "The scaling factor of the guidance "
+    help_msg += "('ω' in the Classifier-Free Diffusion Guidance paper: https://arxiv.org/pdf/2207.12598.pdf)."
+    help_msg += "Must be left blank if `proba_uncond` is set to 1."
     parser.add_argument(
-        "--guidance_factor",
-        type=float,
-        default=4,
-        help="The scaling factor of the guidance ('ω' in the Classifier-Free Diffusion Guidance paper: https://arxiv.org/pdf/2207.12598.pdf).",
+        "--guidance_factor", type=float, default=4, help=help_msg
     )
+    help_msg = "The probability of performing unconditional generation at each step. "
+    help_msg += (
+        "See Classifier-Free Diffusion Guidance (https://arxiv.org/pdf/2207.12598.pdf)."
+    )
+    help_msg += "Set to 1 to disable conditional generation."
     parser.add_argument(
         "--proba_uncond",
         type=float,
         default=0.1,
-        help="The probability of performing unconditional generation at each step. See Classifier-Free Diffusion Guidance (https://arxiv.org/pdf/2207.12598.pdf).",
+        help=help_msg,
     )
     parser.add_argument(
         "--gradient_accumulation_steps",

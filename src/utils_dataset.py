@@ -21,7 +21,7 @@ def setup_dataset(args, logger):
         )
     elif args.use_pytorch_loader:
         dataset = ImageFolder(
-            root=Path(args.train_data_dir, "train").as_posix(),
+            root=Path(args.train_data_dir, args.split).as_posix(),
             transform=lambda x: augmentations(x.convert("RGB")),
             target_transform=lambda y: torch.tensor(y).long(),
         )
