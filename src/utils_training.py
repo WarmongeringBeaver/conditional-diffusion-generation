@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import torch_fidelity
 from diffusers.training_utils import EMAModel
 from diffusers.utils import is_accelerate_version
+from PIL.Image import Image
 from tqdm.auto import tqdm
 
 import wandb
@@ -54,6 +55,15 @@ def resume_from_checkpoint(
 
 
 def get_training_setup(args, accelerator, train_dataloader, logger, dataset):
+    """
+    Returns
+    -------
+    - `Tuple[int, int, List[int]]`
+        A tuple containing:
+        - the total number of update steps per epoch,
+        - the total number of batches for image generation across all GPUs and *per class*
+        - the list of actual evaluation batch sizes *for this process*
+    """
     total_batch_size = (
         args.train_batch_size
         * accelerator.num_processes
@@ -65,6 +75,8 @@ def get_training_setup(args, accelerator, train_dataloader, logger, dataset):
     max_train_steps = args.num_epochs * num_update_steps_per_epoch
 
     # distribute "batches" for image generation
+    # tot_nb_eval_batches is the total number of batches for image generation
+    # *across all GPUs* and *per class*
     tot_nb_eval_batches = ceil(args.nb_generated_images / args.eval_batch_size)
     glob_eval_bs = [args.eval_batch_size] * (tot_nb_eval_batches - 1)
     glob_eval_bs += [
@@ -307,9 +319,9 @@ def generate_samples_and_compute_metrics(
     nb_classes: int,
 ):
     progress_bar = tqdm(
-        total=tot_nb_eval_batches * nb_classes,
-        desc="Generating images",
-        disable=not accelerator.is_local_main_process,
+        total=len(actual_eval_batch_sizes_for_this_process),
+        desc=f"Generating images on process {accelerator.process_index}",
+        # disable=not accelerator.is_local_main_process,
     )
     unet = accelerator.unwrap_model(model)
 
@@ -328,7 +340,7 @@ def generate_samples_and_compute_metrics(
 
     # run pipeline in inference (sample random noise and denoise)
     # -> generate args.nb_generated_images in batches *per class*
-    for label_idx, label in enumerate(range(nb_classes)):
+    for label in range(nb_classes):
         # clean image_generation_tmp_save_folder (it's per-class)
         if accelerator.is_local_main_process:
             if os.path.exists(image_generation_tmp_save_folder):
@@ -340,7 +352,7 @@ def generate_samples_and_compute_metrics(
         class_name = dataset.classes[label]
 
         # pretty bar
-        postfix_str = f"Current class: {class_name} ({label_idx+1}/{nb_classes})"
+        postfix_str = f"Current class: {class_name} ({label+1}/{nb_classes})"
         progress_bar.set_postfix_str(postfix_str)
 
         # loop over eval batches for this process
@@ -358,13 +370,19 @@ def generate_samples_and_compute_metrics(
             ).images
 
             # save images to disk
-            images_pil = pipeline.numpy_to_pil(images)
+            images_pil: list[Image] = pipeline.numpy_to_pil(images)
             for idx, img in enumerate(images_pil):
                 tot_idx = args.eval_batch_size * batch_idx + idx
+                filename = (
+                    f"process_{accelerator.local_process_index}_sample_{tot_idx}.png"
+                )
+                assert not Path.exists(
+                    filename
+                ), "Rewriting existing generated image file!"
                 img.save(
                     Path(
                         image_generation_tmp_save_folder,
-                        f"process_{accelerator.local_process_index}_sample_{tot_idx}.png",
+                        filename,
                     )
                 )
 
@@ -396,8 +414,12 @@ def generate_samples_and_compute_metrics(
                     )
             progress_bar.update()
 
+        # wait for all processes to finish generating+saving images
+        accelerator.wait_for_everyone()
+
         # Compute metrics
         if accelerator.is_main_process:
+            accelerator.print(f"Computing metrics for class {class_name}...")
             metrics_dict = torch_fidelity.calculate_metrics(
                 input1=args.train_data_dir + "/train" + f"/{class_name}",
                 input2=image_generation_tmp_save_folder.as_posix(),
@@ -420,6 +442,7 @@ def generate_samples_and_compute_metrics(
                     },
                     step=global_step,
                 )
+
         # resync everybody for each class
         accelerator.wait_for_everyone()
 
