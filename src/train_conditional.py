@@ -12,7 +12,7 @@ from diffusers.training_utils import EMAModel
 
 import wandb
 from args_parser import parse_args
-from unet_2d import UNet2DModel
+from cond_unet_2d import CondUNet2DModel
 from utils_dataset import setup_dataset
 from utils_misc import (
     args_checker,
@@ -82,7 +82,7 @@ def main(args):
 
     # -------------------------- Model -------------------------
     if args.model_config_name_or_path is None:
-        model = UNet2DModel(
+        model = CondUNet2DModel(
             sample_size=args.resolution,
             in_channels=3,
             out_channels=3,
@@ -108,8 +108,8 @@ def main(args):
             num_class_embeds=None if args.proba_uncond == 1 else nb_classes,
         )
     else:
-        config = UNet2DModel.load_config(args.model_config_name_or_path)
-        model = UNet2DModel.from_config(config)
+        config = CondUNet2DModel.load_config(args.model_config_name_or_path)
+        model = CondUNet2DModel.from_config(config)
 
     # Create EMA for the model.
     if args.use_ema:
@@ -119,7 +119,7 @@ def main(args):
             use_ema_warmup=True,
             inv_gamma=args.ema_inv_gamma,
             power=args.ema_power,
-            model_cls=UNet2DModel,
+            model_cls=CondUNet2DModel,
             model_config=model.config,
         )
     else:
