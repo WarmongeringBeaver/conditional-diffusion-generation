@@ -1,18 +1,18 @@
 # Utilities.
 
-from typing import Optional
-from unet_2d import UNet2DModel
-from diffusers.training_utils import EMAModel
-import torch
 import logging
-import datasets
 import os
-import diffusers
 from pathlib import Path
-from huggingface_hub import Repository, create_repo
+from typing import Optional
+
+import datasets
+import diffusers
+import torch
+from diffusers.training_utils import EMAModel
 from diffusers.utils.import_utils import is_xformers_available
+from huggingface_hub import HfFolder, Repository, create_repo, whoami
 from packaging import version
-from huggingface_hub import HfFolder, whoami
+from cond_unet_2d import CondUNet2DModel
 
 
 def extract_into_tensor(arr, timesteps, broadcast_shape):
@@ -95,7 +95,7 @@ def save_model_hook(models, weights, output_dir, args, ema_model):
 def load_model_hook(models, input_dir, args, ema_model, accelerator):
     if args.use_ema:
         load_model = EMAModel.from_pretrained(
-            os.path.join(input_dir, "unet_ema"), UNet2DModel
+            os.path.join(input_dir, "unet_ema"), CondUNet2DModel
         )
         ema_model.load_state_dict(load_model.state_dict())
         ema_model.to(accelerator.device)
@@ -106,7 +106,7 @@ def load_model_hook(models, input_dir, args, ema_model, accelerator):
         model = models.pop()
 
         # load diffusers style into model
-        load_model = UNet2DModel.from_pretrained(input_dir, subfolder="unet")
+        load_model = CondUNet2DModel.from_pretrained(input_dir, subfolder="unet")
         model.register_to_config(**load_model.config)
 
         model.load_state_dict(load_model.state_dict())

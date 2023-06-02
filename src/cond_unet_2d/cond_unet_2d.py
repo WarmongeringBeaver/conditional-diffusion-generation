@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2023 The HuggingFace Team & Thomas Boyer. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -27,7 +26,7 @@ from diffusers.models.unet_2d_blocks import UNetMidBlock2D, get_down_block, get_
 from diffusers.models.unet_2d import UNet2DOutput
 
 
-class UNet2DModel(ModelMixin, ConfigMixin):
+class CondUNet2DModel(ModelMixin, ConfigMixin):
     r"""
     UNet2DModel is a 2D UNet model that takes in a noisy sample and a timestep and returns sample shaped output.
 
