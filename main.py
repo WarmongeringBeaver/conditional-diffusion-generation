@@ -5,28 +5,22 @@ import numpy as np
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from accelerate.utils import DistributedDataParallelKwargs, ProjectConfiguration
+from accelerate.utils import (DistributedDataParallelKwargs,
+                              ProjectConfiguration)
 from diffusers import DDIMScheduler
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
 
 import wandb
-from args_parser import parse_args
-from cond_unet_2d import CondUNet2DModel
-from utils_dataset import setup_dataset
-from utils_misc import (
-    args_checker,
-    create_repo_structure,
-    setup_logger,
-    setup_xformers_memory_efficient_attention,
-)
-from utils_training import (
-    checkpoint_model,
-    generate_samples_and_compute_metrics,
-    get_training_setup,
-    perform_training_epoch,
-    resume_from_checkpoint,
-)
+from src.args_parser import parse_args
+from src.cond_unet_2d import CondUNet2DModel
+from src.utils_dataset import setup_dataset
+from src.utils_misc import (args_checker, create_repo_structure, setup_logger,
+                            setup_xformers_memory_efficient_attention)
+from src.utils_training import (checkpoint_model,
+                                generate_samples_and_compute_metrics,
+                                get_training_setup, perform_training_epoch,
+                                resume_from_checkpoint)
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -227,7 +221,6 @@ def main(args):
             epoch % args.save_images_epochs == 0 or epoch == args.num_epochs - 1
         ) and epoch > 0:
             generate_samples_and_compute_metrics(
-                tot_nb_eval_batches,
                 args,
                 accelerator,
                 model,

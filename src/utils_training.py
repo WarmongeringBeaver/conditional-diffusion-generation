@@ -1,5 +1,5 @@
 import os
-from math import ceil, log
+from math import ceil
 from pathlib import Path
 from shutil import rmtree
 
@@ -12,8 +12,9 @@ from PIL.Image import Image
 from tqdm.auto import tqdm
 
 import wandb
-from conditional_ddim import ConditionialDDIMPipeline
-from utils_misc import extract_into_tensor, split
+
+from .pipeline_conditional_ddim import ConditionialDDIMPipeline
+from .utils_misc import extract_into_tensor, split
 
 
 def resume_from_checkpoint(
@@ -33,7 +34,8 @@ def resume_from_checkpoint(
         accelerator.wait_for_everyone()
         dirs = os.listdir(chckpnts_dir)
         dirs = sorted(dirs, key=lambda x: int(x.split("_")[1]))
-        path = Path(chckpnts_dir, dirs[-1]).as_posix() if len(dirs) > 0 else None
+        path = Path(chckpnts_dir, dirs[-1]
+                    ).as_posix() if len(dirs) > 0 else None
 
     if path is None:
         accelerator.print(
@@ -80,7 +82,8 @@ def get_training_setup(args, accelerator, train_dataloader, logger, dataset):
     tot_nb_eval_batches = ceil(args.nb_generated_images / args.eval_batch_size)
     glob_eval_bs = [args.eval_batch_size] * (tot_nb_eval_batches - 1)
     glob_eval_bs += [
-        args.nb_generated_images - args.eval_batch_size * (tot_nb_eval_batches - 1)
+        args.nb_generated_images - args.eval_batch_size *
+        (tot_nb_eval_batches - 1)
     ]
     nb_proc = accelerator.num_processes
     actual_eval_batch_sizes_for_this_process = split(
@@ -90,11 +93,13 @@ def get_training_setup(args, accelerator, train_dataloader, logger, dataset):
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(dataset)}")
     logger.info(f"  Num Epochs = {args.num_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
+    logger.info(
+        f"  Instantaneous batch size per device = {args.train_batch_size}")
     logger.info(
         f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}"
     )
-    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(
+        f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {max_train_steps}")
 
     return (
@@ -157,7 +162,8 @@ def perform_training_epoch(
 
         # Add noise to the clean images according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
-        noisy_images = noise_scheduler.add_noise(clean_images, noise, timesteps)
+        noisy_images = noise_scheduler.add_noise(
+            clean_images, noise, timesteps)
 
         with accelerator.accumulate(model):
             loss_value = _forward_backward_pass(
@@ -188,7 +194,6 @@ def perform_training_epoch(
             "lr": lr_scheduler.get_last_lr()[0],
             "step": global_step,
             "epoch": epoch,
-            "log(1+loss)": log(1 + loss_value),
         }
         if args.use_ema:
             logs["ema_decay"] = ema_model.cur_decay_value
@@ -229,7 +234,8 @@ def _forward_backward_pass(
     )
     if do_unconditional_pass:
         class_emb = torch.zeros(
-            (class_labels.shape[0], accelerator.unwrap_model(model).time_embed_dim)
+            (class_labels.shape[0], accelerator.unwrap_model(
+                model).time_embed_dim)
         ).to(accelerator.device)
         class_labels = None
     else:
@@ -257,7 +263,8 @@ def _forward_backward_pass(
         )  # use SNR weighting from distillation paper
         loss = loss.mean()
     else:
-        raise ValueError(f"Unsupported prediction type: {args.prediction_type}")
+        raise ValueError(
+            f"Unsupported prediction type: {args.prediction_type}")
 
     accelerator.backward(loss)
 
@@ -304,7 +311,6 @@ def _syn_training_state(
 
 
 def generate_samples_and_compute_metrics(
-    tot_nb_eval_batches,
     args,
     accelerator,
     model,
@@ -340,6 +346,9 @@ def generate_samples_and_compute_metrics(
 
     # run pipeline in inference (sample random noise and denoise)
     # -> generate args.nb_generated_images in batches *per class*
+    # if uncond gen, no need to loop over classes for generation
+    if args.proba_uncond == 1:
+        nb_classes = 1
     for label in range(nb_classes):
         # clean image_generation_tmp_save_folder (it's per-class)
         if accelerator.is_local_main_process:
@@ -352,16 +361,25 @@ def generate_samples_and_compute_metrics(
         class_name = dataset.classes[label]
 
         # pretty bar
-        postfix_str = f"Current class: {class_name} ({label+1}/{nb_classes})"
-        progress_bar.set_postfix_str(postfix_str)
+        if args.proba_uncond != 1:
+            postfix_str = f"Current class: {class_name} ({label+1}/{nb_classes})"
+            progress_bar.set_postfix_str(postfix_str)
 
         # loop over eval batches for this process
         for batch_idx, actual_bs in enumerate(actual_eval_batch_sizes_for_this_process):
-            class_labels = torch.full(
-                (actual_bs,), label, device=pipeline.device
-            ).long()
+            if args.proba_uncond == 1:
+                class_emb = torch.zeros(
+                    (actual_bs, accelerator.unwrap_model(model).time_embed_dim)
+                ).to(accelerator.device)
+                class_labels = None
+            else:
+                class_labels = torch.full(
+                    (actual_bs,), label, device=pipeline.device
+                ).long()
+                class_emb = None
             images = pipeline(
                 class_labels,
+                class_emb,
                 guidance_factor,
                 generator=generator,
                 batch_size=actual_bs,
@@ -376,8 +394,7 @@ def generate_samples_and_compute_metrics(
                 filename = (
                     f"process_{accelerator.local_process_index}_sample_{tot_idx}.png"
                 )
-                assert not Path.exists(
-                    filename
+                assert not Path(filename).exists(
                 ), "Rewriting existing generated image file!"
                 img.save(
                     Path(
@@ -393,7 +410,8 @@ def generate_samples_and_compute_metrics(
 
                 if args.logger == "tensorboard":
                     if is_accelerate_version(">=", "0.17.0.dev0"):
-                        tracker = accelerator.get_tracker("tensorboard", unwrap=True)
+                        tracker = accelerator.get_tracker(
+                            "tensorboard", unwrap=True)
                     else:
                         tracker = accelerator.get_tracker("tensorboard")
                     tracker.add_images(
@@ -403,6 +421,8 @@ def generate_samples_and_compute_metrics(
                     )
                 elif args.logger == "wandb":
                     # Upcoming `log_images` helper coming in https://github.com/huggingface/accelerate/pull/962/files
+                    if args.proba_uncond == 1:
+                        class_name = "unconditional"
                     accelerator.log(
                         {
                             f"generated_samples/{class_name}": [
@@ -419,29 +439,34 @@ def generate_samples_and_compute_metrics(
 
         # Compute metrics
         if accelerator.is_main_process:
-            accelerator.print(f"Computing metrics for class {class_name}...")
-            metrics_dict = torch_fidelity.calculate_metrics(
-                input1=args.train_data_dir + "/train" + f"/{class_name}",
-                input2=image_generation_tmp_save_folder.as_posix(),
-                cuda=True,
-                batch_size=args.eval_batch_size,
-                # isc=True,
-                fid=True,
-                # kid=True,
-                # ppl=True,
-                verbose=False,
-                cache_root=".fidelity_cache",
-                input1_cache_name=f"{class_name}",  # forces caching
-                rng_seed=42,
-            )
-            for metric_name, metric_value in metrics_dict.items():
-                accelerator.log(
-                    {
-                        f"{metric_name}/{class_name}": metric_value,
-                        "epoch": epoch,
-                    },
-                    step=global_step,
+            if args.proba_uncond == 1:
+                accelerator.print(
+                    f"Skipping metrics computation (unconditional generation)... TODO: implement!")
+            else:
+                accelerator.print(
+                    f"Computing metrics for class {class_name}...")
+                metrics_dict = torch_fidelity.calculate_metrics(
+                    input1=args.train_data_dir + "/train" + f"/{class_name}",
+                    input2=image_generation_tmp_save_folder.as_posix(),
+                    cuda=True,
+                    batch_size=args.eval_batch_size,
+                    # isc=True,
+                    fid=True,
+                    # kid=True,
+                    # ppl=True,
+                    verbose=False,
+                    cache_root=".fidelity_cache",
+                    input1_cache_name=f"{class_name}",  # forces caching
+                    rng_seed=42,
                 )
+                for metric_name, metric_value in metrics_dict.items():
+                    accelerator.log(
+                        {
+                            f"{metric_name}/{class_name}": metric_value,
+                            "epoch": epoch,
+                        },
+                        step=global_step,
+                    )
 
         # resync everybody for each class
         accelerator.wait_for_everyone()
