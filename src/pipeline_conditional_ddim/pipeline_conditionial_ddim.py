@@ -45,10 +45,12 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
     @torch.no_grad()
     def __call__(
         self,
-        class_labels: torch.Tensor,
-        w: float,
+        class_labels: torch.Tensor | None,
+        class_emb: torch.Tensor | None,
+        w: float | None,
         batch_size: int = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[Union[torch.Generator,
+                                  List[torch.Generator]]] = None,
         eta: float = 0.0,
         num_inference_steps: int = 50,
         use_clipped_model_output: Optional[bool] = None,
@@ -59,6 +61,8 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
         Args:
             class_labels (`torch.Tensor`):
                 The class labels to condition on. Should be a tensor of shape `(batch_size,)`.
+            class_emb (`torch.Tensor`):
+                The class embeddings to condition on. Should be a tensor of shape `(batch_size, emb_dim)`.
             w (`float`):
                 The guidance factor. Should be a float between 0 and 1.
             batch_size (`int`, *optional*, defaults to 1):
@@ -119,10 +123,11 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
                 sample=image,
                 timestep=t,
                 class_labels=class_labels,
+                class_emb=class_emb,
             ).sample
 
             # 2. Form the classifier-free guided score
-            if w != 0:
+            if w != 0 and w is not None:
                 # unconditionally predict noise model_output
                 uncond_output = self.unet(
                     sample=image,

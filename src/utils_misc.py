@@ -12,7 +12,8 @@ from diffusers.training_utils import EMAModel
 from diffusers.utils.import_utils import is_xformers_available
 from huggingface_hub import HfFolder, Repository, create_repo, whoami
 from packaging import version
-from cond_unet_2d import CondUNet2DModel
+
+from .cond_unet_2d import CondUNet2DModel
 
 
 def extract_into_tensor(arr, timesteps, broadcast_shape):
@@ -52,7 +53,7 @@ def split(l, n, idx):
     Should probably be replaced by Accelerator.split_between_processes.
     """
     k, m = divmod(len(l), n)
-    l = [l[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
+    l = [l[i * k + min(i, m): (i + 1) * k + min(i + 1, m)] for i in range(n)]
     return l[idx]
 
 
@@ -106,7 +107,8 @@ def load_model_hook(models, input_dir, args, ema_model, accelerator):
         model = models.pop()
 
         # load diffusers style into model
-        load_model = CondUNet2DModel.from_pretrained(input_dir, subfolder="unet")
+        load_model = CondUNet2DModel.from_pretrained(
+            input_dir, subfolder="unet")
         model.register_to_config(**load_model.config)
 
         model.load_state_dict(load_model.state_dict())
@@ -127,7 +129,8 @@ def create_repo_structure(args, accelerator):
         else:
             repo_name = args.hub_model_id
             create_repo(repo_name, exist_ok=True, token=args.hub_token)
-        repo = Repository(args.output_dir, clone_from=repo_name, token=args.hub_token)
+        repo = Repository(
+            args.output_dir, clone_from=repo_name, token=args.hub_token)
 
         with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
             if "step_*" not in gitignore:
