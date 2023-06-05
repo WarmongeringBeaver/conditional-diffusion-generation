@@ -110,6 +110,8 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
                 f" size of {batch_size}. Make sure the batch size matches the length of the generators."
             )
 
+        assert batch_size == 1, "Classifier-free guidance generation is not yet batchified; TODO!"
+
         image = randn_tensor(
             image_shape, generator=generator, device=self.device, dtype=self.unet.dtype
         )
