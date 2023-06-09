@@ -80,6 +80,10 @@ def args_checker(args):
         msg += "but the guidance factor is not None 🧐"
         assert args.guidance_factor is None, msg
 
+    if args.prediction_type == "velocity":
+        raise NotImplementedError(
+            "Velocity prediction is not implemented yet; TODO!")
+
 
 # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
 def save_model_hook(models, weights, output_dir, args, ema_model):
