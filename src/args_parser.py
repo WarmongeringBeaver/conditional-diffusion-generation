@@ -264,8 +264,8 @@ def parse_args():
         "--prediction_type",
         type=str,
         default="epsilon",
-        choices=["epsilon", "sample"],
-        help="Whether the model should predict the 'epsilon'/noise error or directly the reconstructed image 'x0'.",
+        choices=["epsilon", "sample", "velocity"],
+        help="Whether the model should predict the 'epsilon'/noise error, directly the reconstructed image 'x0', or the velocity (see https://arxiv.org/abs/2202.00512)",
     )
     parser.add_argument("--ddim_num_steps", type=int, default=1000)
     parser.add_argument("--ddim_num_inference_steps", type=int, default=50)
