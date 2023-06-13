@@ -47,7 +47,7 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
         self,
         class_labels: torch.Tensor | None,
         class_emb: torch.Tensor | None,
-        w: float | None,
+        w: float | torch.Tensor | None,
         batch_size: int = 1,
         generator: Optional[Union[torch.Generator,
                                   List[torch.Generator]]] = None,
@@ -59,12 +59,12 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
         Args:
-            class_labels (`torch.Tensor`):
-                The class labels to condition on. Should be a tensor of shape `(batch_size,)`.
-            class_emb (`torch.Tensor`):
-                The class embeddings to condition on. Should be a tensor of shape `(batch_size, emb_dim)`.
-            w (`float`):
-                The guidance factor. Should be a float between 0 and 1.
+            class_labels (`torch.Tensor` or None):
+                The class labels to condition on. Should be a tensor of shape `(batch_size,)` or `None` if `class_emb` is directly given.
+            class_emb (`torch.Tensor` or None):
+                The class embeddings to condition on. Should be None if class_labels are passed or a tensor of shape `(batch_size, emb_dim)` otherwise.
+            w (`float` or `torch.Tensor` or None):
+                The guidance factor. Should be None, or a float or a tensor of shape `(batch_size,)` with postive values.
             batch_size (`int`, *optional*, defaults to 1):
                 The number of images to generate.
             generator (`torch.Generator`, *optional*):
@@ -89,6 +89,22 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
             True, otherwise a `tuple. When returning a tuple, the first element is a list with the generated images.
         """
 
+        # Checks
+        assert class_labels is None or (class_labels.ndim == 1 and batch_size == class_labels.shape[0]), (
+            "class_labels must be a 1D tensor of shape (batch_size,) if not None."
+        )
+        assert class_emb is None or (class_emb.ndim == 2 and class_emb.shape[0] == batch_size), (
+            "class_emb must be a 2D tensor of shape (batch_size, emb_dim) if not None."
+        )
+        assert isinstance(w, float) or (w.ndim == 1 and batch_size == w.shape[0]), (
+            "w must be a 1D tensor of shape (batch_size,) if not a single float."
+        )
+        if isinstance(generator, list) and len(generator) != batch_size:
+            raise ValueError(
+                f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
+                f" size of {batch_size}. Make sure the batch size matches the length of the generators."
+            )
+
         # Sample gaussian noise to begin loop
         if isinstance(self.unet.config.sample_size, int):
             image_shape = (
@@ -103,14 +119,6 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
                 self.unet.config.in_channels,
                 *self.unet.config.sample_size,
             )
-
-        if isinstance(generator, list) and len(generator) != batch_size:
-            raise ValueError(
-                f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
-                f" size of {batch_size}. Make sure the batch size matches the length of the generators."
-            )
-
-        assert batch_size == 1, "Classifier-free guidance generation is not yet batchified; TODO!"
 
         image = randn_tensor(
             image_shape, generator=generator, device=self.device, dtype=self.unet.dtype
@@ -129,14 +137,14 @@ class ConditionialDDIMPipeline(DiffusionPipeline):
             ).sample
 
             # 2. Form the classifier-free guided score
-            if w != 0 and w is not None:
+            if w is not None:
                 # unconditionally predict noise model_output
                 uncond_output = self.unet(
                     sample=image,
                     timestep=t,
                     class_labels=None,
                     class_emb=torch.zeros(
-                        (class_labels.shape[0], self.unet.time_embed_dim)
+                        (batch_size, self.unet.time_embed_dim)
                     ).to(class_labels.device),
                 ).sample
 
